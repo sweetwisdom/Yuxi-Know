@@ -7,13 +7,15 @@ export class ScrollController {
   constructor(containerSelector = '.chat', options = {}) {
     this.containerSelector = containerSelector
     this.options = {
-      threshold: 100,
+      threshold: 40,
       scrollDelay: 100,
       retryDelays: [50, 150],
       ...options
     }
 
     this.scrollTimer = null
+    this.scrollRetryTimers = []
+    this.programmaticScrollTimer = null
     this.isUserScrolling = false
     this.shouldAutoScroll = true
     this.isProgrammaticScroll = false
@@ -27,7 +29,13 @@ export class ScrollController {
    * @returns {Element|null}
    */
   getContainer() {
-    return document.querySelector(this.containerSelector)
+    if (typeof this.containerSelector === 'function') {
+      return this.containerSelector()
+    }
+    if (typeof this.containerSelector === 'string') {
+      return document.querySelector(this.containerSelector)
+    }
+    return this.containerSelector || null
   }
 
   /**
@@ -39,7 +47,28 @@ export class ScrollController {
     if (!container) return false
 
     const { threshold } = this.options
-    return container.scrollHeight - container.scrollTop - container.clientHeight <= threshold
+    return this.getBottomOffset(container) <= threshold
+  }
+
+  getBottomOffset(container = this.getContainer()) {
+    if (!container) return Number.POSITIVE_INFINITY
+    return Math.max(0, container.scrollHeight - container.scrollTop - container.clientHeight)
+  }
+
+  cancelPendingScrolls() {
+    this.scrollRetryTimers.forEach((timer) => clearTimeout(timer))
+    this.scrollRetryTimers = []
+  }
+
+  markProgrammaticScroll() {
+    if (this.programmaticScrollTimer) {
+      clearTimeout(this.programmaticScrollTimer)
+    }
+    this.isProgrammaticScroll = true
+    this.programmaticScrollTimer = setTimeout(() => {
+      this.isProgrammaticScroll = false
+      this.programmaticScrollTimer = null
+    }, this.options.scrollDelay)
   }
 
   /**
@@ -50,11 +79,26 @@ export class ScrollController {
       clearTimeout(this.scrollTimer)
     }
 
-    // 如果是程序性滚动，忽略此次事件
+    // 如果是程序性滚动，仍根据当前位置同步状态，避免标记滞留后误吞用户上滚。
     if (this.isProgrammaticScroll) {
+      const atBottom = this.isAtBottom()
+      this.shouldAutoScroll = atBottom
       this.isProgrammaticScroll = false
+      if (this.programmaticScrollTimer) {
+        clearTimeout(this.programmaticScrollTimer)
+        this.programmaticScrollTimer = null
+      }
+      if (!atBottom) {
+        this.cancelPendingScrolls()
+        this.isUserScrolling = true
+        this.scrollTimer = setTimeout(() => {
+          this.isUserScrolling = false
+        }, this.options.scrollDelay)
+      }
       return
     }
+
+    this.cancelPendingScrolls()
 
     // 标记用户正在滚动
     this.isUserScrolling = true
@@ -69,11 +113,32 @@ export class ScrollController {
   }
 
   /**
+   * 等待 DOM 布局稳定
+   * @returns {Promise<void>}
+   */
+  async waitForLayoutStable() {
+    // 使用 requestAnimationFrame 确保 DOM 渲染完成
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+  }
+
+  scrollContainerToBottom(container, behavior = 'auto') {
+    if (!container) return
+    this.markProgrammaticScroll()
+    container.scrollTo({
+      top: Math.max(0, container.scrollHeight - container.clientHeight),
+      behavior
+    })
+  }
+
+  /**
    * 智能滚动到底部
    * @param {boolean} force - 是否强制滚动
    */
   async scrollToBottom(force = false) {
     await nextTick()
+    // 等待 DOM 布局稳定
+    await this.waitForLayoutStable()
 
     // 只有在应该自动滚动时才执行（除非强制）
     if (!force && !this.shouldAutoScroll) return
@@ -81,29 +146,18 @@ export class ScrollController {
     const container = this.getContainer()
     if (!container) return
 
-    // 标记为程序性滚动
-    this.isProgrammaticScroll = true
+    this.cancelPendingScrolls()
 
-    const scrollOptions = {
-      top: container.scrollHeight,
-      behavior: 'smooth'
-    }
+    this.scrollContainerToBottom(container, 'auto')
 
-    // 立即滚动
-    container.scrollTo(scrollOptions)
-
-    // 多次重试确保滚动成功
-    this.options.retryDelays.forEach((delay, index) => {
-      setTimeout(() => {
+    // 动态内容仍可能在下一帧补齐高度，保留少量重试，但用户手动滚动会立即取消。
+    this.options.retryDelays.forEach((delay) => {
+      const timer = setTimeout(() => {
         if (force || this.shouldAutoScroll) {
-          this.isProgrammaticScroll = true
-          const behavior = index === this.options.retryDelays.length - 1 ? 'auto' : 'smooth'
-          container.scrollTo({
-            top: container.scrollHeight,
-            behavior
-          })
+          this.scrollContainerToBottom(container, 'auto')
         }
       }, delay)
+      this.scrollRetryTimers.push(timer)
     })
   }
 
@@ -111,15 +165,11 @@ export class ScrollController {
     const container = this.getContainer()
     if (!container) return
 
-    // 标记为程序性滚动
-    this.isProgrammaticScroll = true
-
-    const scrollOptions = {
-      top: container.scrollHeight,
-      behavior: 'auto'
-    }
-
-    container.scrollTo(scrollOptions)
+    this.cancelPendingScrolls()
+    await nextTick()
+    await this.waitForLayoutStable()
+    this.scrollContainerToBottom(container, 'auto')
+    this.shouldAutoScroll = true
   }
 
   /**
@@ -155,6 +205,11 @@ export class ScrollController {
       clearTimeout(this.scrollTimer)
       this.scrollTimer = null
     }
+    if (this.programmaticScrollTimer) {
+      clearTimeout(this.programmaticScrollTimer)
+      this.programmaticScrollTimer = null
+    }
+    this.cancelPendingScrolls()
   }
 
   /**

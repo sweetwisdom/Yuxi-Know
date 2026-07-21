@@ -5,7 +5,7 @@
         <span class="note">write_file</span>
         <span class="separator" v-if="filePath">|</span>
         <span class="description code">{{ filePath }}</span>
-        <span class="tag success"> +{{ lineCount }}</span>
+        <span class="tag success" v-if="lineCount > 0"> +{{ lineCount }}</span>
       </div>
     </template>
 
@@ -30,15 +30,12 @@ const parsedArgs = computed(() => {
   if (typeof args === 'object') return args
   try {
     return JSON.parse(args)
-  } catch (e) {
+  } catch {
     return {}
   }
 })
 
-const filePath = computed(() => {
-  const path = parsedArgs.value.file_path || ''
-  return path.startsWith('/') ? path.slice(1) : path
-})
+const filePath = computed(() => parsedArgs.value.file_path || '')
 const content = computed(() => parsedArgs.value.content || '')
 const lineCount = computed(() => {
   if (!content.value) return 0

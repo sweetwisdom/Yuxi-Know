@@ -7,7 +7,7 @@
         </div>
         <div class="stat-content">
           <div class="stat-value">{{ basicStats?.total_conversations || 0 }}</div>
-          <div class="stat-label">总对话数</div>
+          <div class="stat-label">累计会话</div>
           <div class="stat-trend" v-if="basicStats?.conversation_trend">
             <TrendingUp v-if="basicStats.conversation_trend > 0" class="trend-icon up" />
             <TrendingDown v-else-if="basicStats.conversation_trend < 0" class="trend-icon down" />
@@ -46,7 +46,7 @@
         </div>
       </div>
 
-      <div class="stat-card secondary">
+      <div class="stat-card secondary clickable" @click="handleFeedbackClick">
         <div class="stat-icon">
           <BarChart3 class="icon" />
         </div>
@@ -89,6 +89,14 @@ const props = defineProps({
   }
 })
 
+// Emits
+const emit = defineEmits(['open-feedback'])
+
+// Methods
+const handleFeedbackClick = () => {
+  emit('open-feedback')
+}
+
 // Methods
 const getSatisfactionClass = () => {
   const rate = props.basicStats?.feedback_stats?.satisfaction_rate || 0
@@ -108,7 +116,7 @@ const getSatisfactionClass = () => {
 
   .stats-grid {
     display: grid;
-    padding: 0 16px;
+    padding: 0 var(--page-padding);
     grid-template-columns: repeat(6, 1fr);
     gap: 16px;
 
@@ -127,7 +135,7 @@ const getSatisfactionClass = () => {
 
       &:hover {
         border-color: var(--gray-200);
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+        box-shadow: 0 1px 3px 0 var(--shadow-1);
       }
 
       &.primary {
@@ -163,6 +171,10 @@ const getSatisfactionClass = () => {
           background-color: var(--color-accent-50);
           color: var(--color-accent-700);
         }
+      }
+
+      &.clickable {
+        cursor: pointer;
       }
 
       &.satisfaction-high {

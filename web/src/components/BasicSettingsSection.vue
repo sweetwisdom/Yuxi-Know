@@ -1,93 +1,117 @@
 <template>
   <div class="basic-settings-section">
-    <h3 class="section-title">检索配置</h3>
-    <div class="settings-panel">
-      <div class="setting-row two-cols">
-        <div class="col-item">
-          <div class="setting-label">{{ items?.default_model?.des || '默认对话模型' }}</div>
-          <div class="setting-content">
-            <ModelSelectorComponent
-              @select-model="handleChatModelSelect"
-              :model_spec="configStore.config?.default_model"
-              placeholder="请选择默认模型"
+    <template v-if="userStore.isAdmin">
+      <div class="section-title">默认项配置</div>
+      <div class="settings-panel">
+        <template v-if="userStore.isSuperAdmin">
+          <div class="setting-row two-cols">
+            <div class="col-item">
+              <div class="setting-label">{{ items?.default_model?.des || '默认对话模型' }}</div>
+              <div class="setting-content">
+                <ModelSelectorComponent
+                  @select-model="handleChatModelSelect"
+                  :model_spec="configStore.config?.default_model"
+                  placeholder="请选择默认模型"
+                />
+              </div>
+            </div>
+            <div class="col-item">
+              <div class="setting-label">{{ items?.fast_model?.des }}</div>
+              <div class="setting-content">
+                <ModelSelectorComponent
+                  @select-model="handleFastModelSelect"
+                  :model_spec="configStore.config?.fast_model"
+                  placeholder="请选择模型"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="setting-row two-cols">
+            <div class="col-item">
+              <div class="setting-label">{{ items?.embed_model?.des }}</div>
+              <div class="setting-content">
+                <EmbeddingModelSelector
+                  :value="configStore.config?.embed_model"
+                  @change="handleChange('embed_model', $event)"
+                  style="width: 100%"
+                />
+              </div>
+            </div>
+            <div class="col-item">
+              <div class="setting-label">{{ items?.reranker?.des }}</div>
+              <div class="setting-content">
+                <RerankModelSelector
+                  :value="configStore.config?.reranker"
+                  @change="handleChange('reranker', $event)"
+                  style="width: 100%"
+                />
+              </div>
+            </div>
+          </div>
+          <div class="setting-row two-cols">
+            <div class="col-item">
+              <div class="setting-label">
+                {{ items?.default_ocr_engine?.des || '默认 OCR 解析引擎' }}
+              </div>
+              <div class="setting-content">
+                <a-select
+                  :value="configStore.config?.default_ocr_engine || 'rapid_ocr'"
+                  @change="handleChange('default_ocr_engine', $event)"
+                  class="full-width"
+                >
+                  <a-select-option
+                    v-for="option in ocrEngineOptions"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </a-select-option>
+                </a-select>
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <template v-if="userStore.isSuperAdmin">
+        <div class="section-title">内容审查配置</div>
+        <div class="section">
+          <div class="card">
+            <span class="label">{{ items?.enable_content_guard?.des }}</span>
+            <a-switch
+              :checked="configStore.config?.enable_content_guard"
+              @change="handleChange('enable_content_guard', $event)"
             />
           </div>
-        </div>
-        <div class="col-item">
-          <div class="setting-label">{{ items?.fast_model.des }}</div>
-          <div class="setting-content">
+          <div class="card" v-if="configStore.config?.enable_content_guard">
+            <span class="label">{{ items?.enable_content_guard_llm?.des }}</span>
+            <a-switch
+              :checked="configStore.config?.enable_content_guard_llm"
+              @change="handleChange('enable_content_guard_llm', $event)"
+            />
+          </div>
+          <div
+            class="card card-select"
+            v-if="
+              configStore.config?.enable_content_guard &&
+              configStore.config?.enable_content_guard_llm
+            "
+          >
+            <span class="label">{{ items?.content_guard_llm_model?.des }}</span>
             <ModelSelectorComponent
-              @select-model="handleFastModelSelect"
-              :model_spec="configStore.config?.fast_model"
+              @select-model="handleContentGuardModelSelect"
+              :model_spec="configStore.config?.content_guard_llm_model"
               placeholder="请选择模型"
             />
           </div>
         </div>
-      </div>
-      <div class="setting-row two-cols">
-        <div class="col-item">
-          <div class="setting-label">{{ items?.embed_model.des }}</div>
-          <div class="setting-content">
-            <EmbeddingModelSelector
-              :value="configStore.config?.embed_model"
-              @change="handleChange('embed_model', $event)"
-              style="width: 100%"
-            />
-          </div>
-        </div>
-        <div class="col-item">
-          <div class="setting-label">{{ items?.reranker.des }}</div>
-          <div class="setting-content">
-            <a-select
-              class="full-width"
-              :value="configStore.config?.reranker"
-              @change="handleChange('reranker', $event)"
-              placeholder="请选择重排序模型"
-            >
-              <a-select-option v-for="(name, idx) in rerankerChoices" :key="idx" :value="name"
-                >{{ name }}
-              </a-select-option>
-            </a-select>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <h3 class="section-title">内容审查配置</h3>
-    <div class="section">
-      <div class="card">
-        <span class="label">{{ items?.enable_content_guard.des }}</span>
-        <a-switch
-          :checked="configStore.config?.enable_content_guard"
-          @change="handleChange('enable_content_guard', $event)"
-        />
-      </div>
-      <div class="card" v-if="configStore.config?.enable_content_guard">
-        <span class="label">{{ items?.enable_content_guard_llm.des }}</span>
-        <a-switch
-          :checked="configStore.config?.enable_content_guard_llm"
-          @change="handleChange('enable_content_guard_llm', $event)"
-        />
-      </div>
-      <div
-        class="card card-select"
-        v-if="
-          configStore.config?.enable_content_guard && configStore.config?.enable_content_guard_llm
-        "
-      >
-        <span class="label">{{ items?.content_guard_llm_model.des }}</span>
-        <ModelSelectorComponent
-          @select-model="handleContentGuardModelSelect"
-          :model_spec="configStore.config?.content_guard_llm_model"
-          placeholder="请选择模型"
-        />
-      </div>
-    </div>
+      </template>
+    </template>
 
     <!-- 服务链接部分 -->
-    <h3 v-if="userStore.isAdmin" class="section-title">服务链接</h3>
+    <div v-if="userStore.isAdmin" class="section-title">服务链接</div>
     <div v-if="userStore.isAdmin">
-      <p class="service-description">
+      <p class="section-description">
         快速访问系统相关的外部服务，需要将 localhost 替换为实际的 IP 地址。
       </p>
       <div class="services-grid">
@@ -98,8 +122,9 @@
           </div>
           <a-button
             type="default"
+            class="lucide-icon-btn"
             @click="openLink('http://localhost:7474/')"
-            :icon="h(GlobalOutlined)"
+            :icon="h(Globe, { size: 18 })"
           >
             访问
           </a-button>
@@ -112,8 +137,9 @@
           </div>
           <a-button
             type="default"
+            class="lucide-icon-btn"
             @click="openLink('http://localhost:5050/docs')"
-            :icon="h(GlobalOutlined)"
+            :icon="h(Globe, { size: 18 })"
           >
             访问
           </a-button>
@@ -126,8 +152,9 @@
           </div>
           <a-button
             type="default"
+            class="lucide-icon-btn"
             @click="openLink('http://localhost:9001')"
-            :icon="h(GlobalOutlined)"
+            :icon="h(Globe, { size: 18 })"
           >
             访问
           </a-button>
@@ -140,8 +167,9 @@
           </div>
           <a-button
             type="default"
+            class="lucide-icon-btn"
             @click="openLink('http://localhost:9091/webui/')"
-            :icon="h(GlobalOutlined)"
+            :icon="h(Globe, { size: 18 })"
           >
             访问
           </a-button>
@@ -155,36 +183,27 @@
 import { computed, h } from 'vue'
 import { useConfigStore } from '@/stores/config'
 import { useUserStore } from '@/stores/user'
-import { GlobalOutlined } from '@ant-design/icons-vue'
+import { Globe } from 'lucide-vue-next'
 import ModelSelectorComponent from '@/components/ModelSelectorComponent.vue'
 import EmbeddingModelSelector from '@/components/EmbeddingModelSelector.vue'
+import RerankModelSelector from '@/components/RerankModelSelector.vue'
 
 const configStore = useConfigStore()
 const userStore = useUserStore()
-const items = computed(() => configStore.config._config_items)
-
-const rerankerChoices = computed(() => {
-  return Object.keys(configStore?.config?.reranker_names || {}) || []
-})
-
-const preHandleChange = (key, e) => {
-  return true
-}
+const items = computed(() => configStore.config?._config_items || {})
+const ocrEngineOptions = [
+  { value: 'disable', label: '不启用' },
+  { value: 'rapid_ocr', label: 'RapidOCR (ONNX)' },
+  { value: 'mineru_ocr', label: 'MinerU OCR' },
+  { value: 'mineru_official', label: 'MinerU Official API' },
+  { value: 'pp_structure_v3_ocr', label: 'PP-Structure-V3' },
+  { value: 'deepseek_ocr', label: 'DeepSeek OCR' },
+  { value: 'paddleocr_vl_1_6', label: 'PaddleOCR-VL-1.6' },
+  { value: 'paddleocr_pp_ocrv6', label: 'PP-OCRv6' }
+]
 
 const handleChange = (key, e) => {
-  if (!preHandleChange(key, e)) {
-    return
-  }
   configStore.setConfigValue(key, e)
-}
-
-const handleChanges = (items) => {
-  for (const key in items) {
-    if (!preHandleChange(key, items[key])) {
-      return
-    }
-  }
-  configStore.setConfigValues(items)
 }
 
 const handleChatModelSelect = (spec) => {
@@ -212,29 +231,6 @@ const openLink = (url) => {
 
 <style lang="less" scoped>
 .basic-settings-section {
-  .settings-content {
-    max-width: 100%;
-  }
-
-  .section-title {
-    color: var(--gray-900);
-    font-size: 16px;
-    font-weight: 600;
-    margin: 24px 0 0 0;
-    padding-bottom: 8px;
-
-    &:first-child {
-      margin-top: 12px;
-    }
-  }
-
-  .service-description {
-    color: var(--gray-600);
-    font-size: 14px;
-    margin: 0 0 16px 0;
-    line-height: 1.5;
-  }
-
   .section {
     background-color: var(--gray-0);
     padding: 10px 16px;
@@ -312,6 +308,11 @@ const openLink = (url) => {
     }
   }
 
+  .agent-select {
+    width: 320px;
+    max-width: 100%;
+  }
+
   .services-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -331,8 +332,8 @@ const openLink = (url) => {
     min-height: 70px;
 
     &:hover {
-      box-shadow: 0 1px 8px var(--gray-200);
-      border-color: var(--main-200);
+      box-shadow: 0 1px 8px var(--gray-150);
+      border-color: var(--gray-100);
     }
 
     .service-info {
@@ -343,7 +344,7 @@ const openLink = (url) => {
         margin: 0 0 4px 0;
         color: var(--gray-900);
         font-size: 15px;
-        font-weight: 600;
+        font-weight: 500;
       }
 
       p {
@@ -352,6 +353,12 @@ const openLink = (url) => {
         font-size: 13px;
         line-height: 1.4;
       }
+    }
+  }
+
+  @media (max-width: 768px) {
+    .agent-select {
+      width: 100%;
     }
   }
 }

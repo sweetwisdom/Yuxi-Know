@@ -1,22 +1,20 @@
 <template>
-  <div class="tool-call-display" :class="{ 'is-collapsed': !isExpanded }">
+  <div
+    class="tool-call-display"
+    :class="{ 'is-collapsed': !isExpanded, 'is-timeline': isTimeline }"
+  >
     <!-- Header Slot -->
     <div class="tool-header" @click="toggleExpand">
-      <!-- Slot for completely overriding header (not recommended based on new requirement but kept for backward compat if needed, or remove if strict) -->
-      <!-- Actually, the requirement says "tool call 的 header 也要有 slot", but "ICON 保留".
-           So we should probably not use a single "header" slot that replaces everything.
-           Instead, we structure it: Icon + Content + ExpandIcon.
-      -->
-
       <!-- Fixed Status Icon -->
-      <span v-if="toolCall.status === 'success' || toolCall.tool_call_result">
-        <CircleCheckBig size="16" class="tool-loader tool-success" />
+      <span v-if="effectiveStatus === 'completed'">
+        <component v-if="toolIcon" :is="toolIcon" size="15" class="tool-loader tool-success" />
+        <CheckCircle v-else size="15" class="tool-loader tool-success" />
       </span>
-      <span v-else-if="toolCall.status === 'error'">
-        <CircleCheckBig size="16" class="tool-loader tool-error" />
+      <span v-else-if="effectiveStatus === 'error'">
+        <XCircle size="15" class="tool-loader tool-error" />
       </span>
       <span v-else>
-        <Loader size="16" class="tool-loader rotate tool-loading" />
+        <Loader size="15" class="tool-loader rotate tool-loading" />
       </span>
 
       <!-- Content Area with Slots -->
@@ -61,7 +59,7 @@
     </div>
 
     <!-- Content Area -->
-    <div class="tool-content" v-show="isExpanded">
+    <div v-if="isExpanded" class="tool-content">
       <!-- Params Slot -->
       <div class="tool-params" v-if="hasParams && !hideParams">
         <slot name="params" :tool-call="toolCall" :args="formattedArgs">
@@ -73,7 +71,7 @@
       </div>
 
       <!-- Result Slot -->
-      <div class="tool-result" v-if="hasResult">
+      <div class="tool-result" style="opacity: 0.8" v-if="hasResult || forceShowResult">
         <slot name="result" :tool-call="toolCall" :result-content="resultContent">
           <div class="tool-result-content" :data-tool-call-id="toolCall.id">
             <!-- Default rendering -->
@@ -93,9 +91,10 @@
 
 <script setup>
 import { ref, computed } from 'vue'
-import { Loader, CircleCheckBig, ChevronsUpDown, ChevronsDownUp } from 'lucide-vue-next'
+import { Loader, ChevronsUpDown, ChevronsDownUp, XCircle, CheckCircle } from 'lucide-vue-next'
 import { useAgentStore } from '@/stores/agent'
 import { storeToRefs } from 'pinia'
+import { getToolCallId, getToolIcon } from './toolRegistry'
 
 const props = defineProps({
   toolCall: {
@@ -109,6 +108,20 @@ const props = defineProps({
   hideParams: {
     type: Boolean,
     default: false
+  },
+  appearance: {
+    type: String,
+    default: 'card'
+  },
+  // 外部可覆盖状态以驱动图标：'running' | 'completed' | 'failed'（用于结果不随流式返回的工具，如 task）
+  status: {
+    type: String,
+    default: ''
+  },
+  // 即使没有 tool_call_result 也展示结果区（配合外部提供的结果内容）
+  forceShowResult: {
+    type: Boolean,
+    default: false
   }
 })
 
@@ -116,18 +129,31 @@ const agentStore = useAgentStore()
 const { availableTools } = storeToRefs(agentStore)
 
 const isExpanded = ref(props.defaultExpanded)
+const isTimeline = computed(() => props.appearance === 'timeline')
 
 const toggleExpand = () => {
   isExpanded.value = !isExpanded.value
 }
 
-// Tool Name Logic
-const toolName = computed(() => {
-  const toolId = props.toolCall.name || props.toolCall.function?.name
-  const toolsList = availableTools.value ? Object.values(availableTools.value) : []
-  const tool = toolsList.find((t) => t.id === toolId)
-  return tool ? tool.name : toolId
+// 图标状态：优先用外部传入的 status，否则按 tool_call_result/status 推断
+const effectiveStatus = computed(() => {
+  if (props.status) return props.status
+  if (props.toolCall.status === 'success' || props.toolCall.tool_call_result) return 'completed'
+  if (props.toolCall.status === 'error') return 'failed'
+  return 'running'
 })
+
+// Tool Name Logic
+const toolId = computed(() => getToolCallId(props.toolCall))
+
+const toolName = computed(() => {
+  const toolsList = availableTools.value ? Object.values(availableTools.value) : []
+  const tool = toolsList.find((t) => t.id === toolId.value)
+  return tool ? tool.name : toolId.value
+})
+
+// Tool Icon Mapping
+const toolIcon = computed(() => getToolIcon(toolId.value))
 
 // Args Logic
 const formattedArgs = computed(() => {
@@ -141,7 +167,7 @@ const formattedArgs = computed(() => {
     } else if (typeof args === 'object' && args !== null) {
       return JSON.stringify(args, null, 2)
     }
-  } catch (e) {
+  } catch {
     // ignore
   }
   return args
@@ -167,7 +193,7 @@ const parsedResultData = computed(() => {
   if (typeof content === 'string') {
     try {
       return JSON.parse(content)
-    } catch (error) {
+    } catch {
       return content
     }
   }
@@ -192,33 +218,37 @@ const formatResultData = (data) => {
 
 <style lang="less" scoped>
 .tool-call-display {
-  outline: 1px solid var(--gray-150);
+  border: 1px solid var(--gray-100);
   border-radius: 8px;
   overflow: hidden;
   transition: all 0.2s ease;
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 
   &:last-child {
     margin-bottom: 0;
   }
 
   .tool-header {
-    padding: 8px 12px;
-    font-size: 14px;
+    padding: 6px 10px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--gray-800);
-    border-bottom: 1px solid var(--gray-100);
+    border-bottom: 1px solid var(--gray-50);
     display: flex;
     align-items: center;
     gap: 8px;
     cursor: pointer;
     user-select: none;
     position: relative;
-    transition: color 0.2s ease;
+    transition: background-color 0.2s ease;
 
-    .anticon {
-      color: var(--main-color);
-      font-size: 16px;
+    &:hover {
+      background-color: var(--gray-25);
+    }
+
+    & > span {
+      display: flex;
+      align-items: center;
     }
 
     .tool-name {
@@ -226,15 +256,9 @@ const formatResultData = (data) => {
       color: var(--main-700);
     }
 
-    span {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
     .tool-loader {
-      margin-top: 2px;
-      color: var(--main-700);
+      margin-top: 0;
+      color: var(--main-600);
     }
 
     .tool-loader.rotate {
@@ -255,7 +279,7 @@ const formatResultData = (data) => {
 
     .tool-expand-icon {
       margin-left: auto;
-      color: var(--gray-400);
+      color: var(--gray-300);
       display: flex;
       align-items: center;
     }
@@ -267,65 +291,57 @@ const formatResultData = (data) => {
       overflow: hidden;
       white-space: nowrap;
       text-overflow: ellipsis;
+      color: var(--gray-600);
 
       :deep(.sep-header) {
         display: flex;
         align-items: center;
         gap: 8px;
-        font-size: 14px;
+        font-size: 13px;
         width: 100%;
         overflow: hidden;
+
+        .note {
+          font-weight: 500;
+          color: var(--gray-600);
+          flex-shrink: 0;
+        }
+
+        .separator {
+          color: var(--gray-300);
+          flex-shrink: 0;
+        }
+
+        .description {
+          color: var(--gray-600);
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          min-width: 0;
+        }
       }
 
       :deep(.keywords) {
         color: var(--main-700);
         font-weight: 600;
-        font-size: 14px;
-      }
-
-      :deep(.note) {
-        font-weight: 600;
-        color: var(--main-700);
-        white-space: nowrap;
-        flex-shrink: 0;
-      }
-
-      :deep(span.code) {
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-      }
-
-      :deep(.separator) {
-        color: var(--gray-300);
-        flex-shrink: 0;
-      }
-
-      :deep(.description) {
-        color: var(--gray-700);
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        min-width: 0;
       }
 
       :deep(.tag) {
-        font-size: 12px;
-        color: var(--gray-800);
-        background-color: var(--gray-50);
+        font-size: 11px;
+        color: var(--gray-500);
+        // background-color: var(--gray-50);
         padding: 0px 4px;
         border-radius: 4px;
         margin-left: 8px;
-
-        &.tag-yes {
-          color: var(--main-500);
-        }
+        white-space: nowrap;
 
         &.success {
           color: var(--color-success-500);
-          background-color: var(--color-success-50);
+          // background-color: var(--color-success-50);
         }
         &.error {
           color: var(--color-error-500);
-          background-color: var(--color-error-50);
+          // background-color: var(--color-error-50);
         }
       }
     }
@@ -337,13 +353,13 @@ const formatResultData = (data) => {
     .tool-params {
       padding: 8px 12px;
       background-color: var(--gray-25);
-      border-bottom: 1px solid var(--gray-150);
+      border-bottom: 1px solid var(--gray-50);
 
       .tool-params-content {
         margin: 0;
         font-size: 12px;
         overflow-x: auto;
-        color: var(--gray-700);
+        color: var(--gray-600);
         line-height: 1.5;
 
         pre {
@@ -352,21 +368,66 @@ const formatResultData = (data) => {
         }
       }
     }
-
-    .tool-result {
-      padding: 0;
-      background-color: transparent;
-
-      .tool-result-content {
-        padding: 0;
-        background-color: transparent;
-      }
-    }
   }
 
   &.is-collapsed {
     .tool-header {
       border-bottom: none;
+    }
+  }
+
+  &.is-timeline {
+    border: none;
+    border-radius: 0;
+    overflow: visible;
+    margin-bottom: 0;
+    padding-left: 0;
+    position: relative;
+
+    .tool-header {
+      padding: 4px 0;
+      background-color: transparent;
+      border-bottom: none;
+      color: var(--gray-500);
+      gap: 10px;
+
+      &:hover {
+        background-color: transparent;
+        color: var(--gray-700);
+      }
+
+      .tool-name {
+        color: var(--gray-600);
+      }
+
+      .tool-loader {
+        color: var(--gray-600);
+      }
+
+      .tool-expand-icon {
+        opacity: 0.5;
+      }
+
+      .tool-header-content {
+        font-size: 13px;
+        color: var(--gray-500);
+      }
+    }
+
+    .tool-content {
+      margin: 4px 0 8px 8px;
+      padding-left: 8px;
+      border-left: 1px solid var(--gray-100);
+
+      &:hover {
+        border-left-color: var(--gray-400);
+      }
+
+      .tool-params {
+        padding: 4px 0 8px;
+        background-color: transparent;
+        border-bottom: none;
+      }
     }
   }
 }
@@ -391,7 +452,7 @@ const formatResultData = (data) => {
 
     .default-content {
       background: var(--gray-0);
-      padding: 12px;
+      padding: 8px 0px;
 
       pre {
         margin: 0;
@@ -402,7 +463,7 @@ const formatResultData = (data) => {
         word-break: break-word;
         max-height: 300px;
         overflow-y: auto;
-        background: var(--gray-50);
+        background: var(--gray-25);
         padding: 10px;
         border-radius: 4px;
       }

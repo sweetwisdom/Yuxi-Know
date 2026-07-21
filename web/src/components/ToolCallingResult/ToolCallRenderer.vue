@@ -1,180 +1,112 @@
 <template>
-  <!-- 知识图谱查询结果 -->
-  <KnowledgeGraphTool v-if="isKnowledgeGraphResult" :tool-call="toolCall" ref="graphToolCallRef" />
-
-  <!-- 网页搜索 -->
-  <WebSearchTool v-else-if="isWebSearchResult" :tool-call="toolCall" />
-
-  <!-- 知识库 -->
-  <KnowledgeBaseTool v-else-if="isKnowledgeBaseResult" :tool-call="toolCall" />
-
-  <!-- 待办事项 -->
-  <TodoListTool v-else-if="isTodoListResult" :tool-call="toolCall" />
-
-  <!-- 计算器 -->
-  <CalculatorTool v-else-if="isCalculatorResult" :tool-call="toolCall" />
-
-  <!-- 图片 -->
-  <ImageTool v-else-if="isImageResult" :tool-call="toolCall" />
-
-  <!-- 任务分配 -->
-  <TaskTool v-else-if="isTaskResult" :tool-call="toolCall" />
-
-  <!-- 写文件 -->
-  <WriteFileTool v-else-if="isWriteFileResult" :tool-call="toolCall" />
-
-  <!-- 读文件 -->
-  <ReadFileTool v-else-if="isReadFileResult" :tool-call="toolCall" />
-
-  <!-- 列目录 -->
-  <ListDirectoryTool v-else-if="isListDirectoryResult" :tool-call="toolCall" />
-
-  <!-- 搜索文件内容 -->
-  <SearchFileContentTool v-else-if="isSearchFileContentResult" :tool-call="toolCall" />
-
-  <!-- Glob 搜索 -->
-  <GlobTool v-else-if="isGlobResult" :tool-call="toolCall" />
-
-  <!-- 编辑文件 -->
-  <EditFileTool v-else-if="isEditFileResult" :tool-call="toolCall" />
-
-  <!-- 默认展示 -->
-  <BaseToolCall v-else :tool-call="toolCall" />
+  <component
+    :is="currentRenderer"
+    v-if="currentRenderer"
+    :tool-call="toolCall"
+    :appearance="appearance"
+    :default-expanded="defaultExpanded"
+    ref="toolRendererRef"
+  />
+  <BaseToolCall
+    v-else-if="!isHidden"
+    :tool-call="toolCall"
+    :appearance="appearance"
+    :default-expanded="defaultExpanded"
+  />
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import BaseToolCall from './BaseToolCall.vue'
-import { useAgentStore } from '@/stores/agent'
-import { useDatabaseStore } from '@/stores/database'
 
 import WebSearchTool from './tools/WebSearchTool.vue'
-import KnowledgeBaseTool from './tools/KnowledgeBaseTool.vue'
-import KnowledgeGraphTool from './tools/KnowledgeGraphTool.vue'
+import ListKbsTool from './tools/ListKbsTool.vue'
+import GetMindmapTool from './tools/GetMindmapTool.vue'
+import QueryKbTool from './tools/QueryKbTool.vue'
+import FindKbDocumentTool from './tools/FindKbDocumentTool.vue'
+import OpenKbDocumentTool from './tools/OpenKbDocumentTool.vue'
 import CalculatorTool from './tools/CalculatorTool.vue'
 import TodoListTool from './tools/TodoListTool.vue'
-import ImageTool from './tools/ImageTool.vue'
 import TaskTool from './tools/TaskTool.vue'
+import SubagentLifecycleTool from './tools/SubagentLifecycleTool.vue'
+import ImageTool from './tools/ImageTool.vue'
 import WriteFileTool from './tools/WriteFileTool.vue'
 import ReadFileTool from './tools/ReadFileTool.vue'
 import ListDirectoryTool from './tools/ListDirectoryTool.vue'
 import SearchFileContentTool from './tools/SearchFileContentTool.vue'
+import SearchFileTool from './tools/SearchFileTool.vue'
+import GrepTool from './tools/GrepTool.vue'
 import GlobTool from './tools/GlobTool.vue'
 import EditFileTool from './tools/EditFileTool.vue'
+import MysqlQueryTool from './tools/MysqlQueryTool.vue'
+import MysqlDescribeTableTool from './tools/MysqlDescribeTableTool.vue'
+import MysqlListTablesTool from './tools/MysqlListTablesTool.vue'
+import AskUserQuestionTool from './tools/AskUserQuestionTool.vue'
+import ExecuteTool from './tools/ExecuteTool.vue'
+import OcrParseFileTool from './tools/OcrParseFileTool.vue'
+import { getToolCallId, isHiddenToolCall } from './toolRegistry'
 
 const props = defineProps({
   toolCall: {
     type: Object,
     required: true
+  },
+  appearance: {
+    type: String,
+    default: 'card'
+  },
+  defaultExpanded: {
+    type: Boolean,
+    default: false
   }
 })
 
-const agentStore = useAgentStore()
-const databaseStore = useDatabaseStore()
+const toolId = computed(() => getToolCallId(props.toolCall))
 
-const toolName = computed(() => props.toolCall.name || props.toolCall.function?.name || '')
-const tool = computed(() => {
-  const toolsList = agentStore?.availableTools ? Object.values(agentStore.availableTools) : []
-  const tool = toolsList.find((t) => t.name === toolName.value)
-  return tool || null
-})
-
-const databases = computed(() => databaseStore.databases || [])
-
-const parseData = (content) => {
-  if (typeof content === 'string') {
-    try {
-      return JSON.parse(content)
-    } catch (error) {
-      return content
-    }
-  }
-  return content
+const TOOL_RENDERERS = {
+  ask_user_question: AskUserQuestionTool,
+  bash: ExecuteTool,
+  calculator: CalculatorTool,
+  cmd: ExecuteTool,
+  edit_file: EditFileTool,
+  execute: ExecuteTool,
+  find_kb_document: FindKbDocumentTool,
+  get_mindmap: GetMindmapTool,
+  glob: GlobTool,
+  grep: GrepTool,
+  list_directory: ListDirectoryTool,
+  list_kbs: ListKbsTool,
+  ls: ListDirectoryTool,
+  mysql_describe_table: MysqlDescribeTableTool,
+  mysql_list_tables: MysqlListTablesTool,
+  mysql_query: MysqlQueryTool,
+  ocr_parse_file: OcrParseFileTool,
+  open_kb_document: OpenKbDocumentTool,
+  query_kb: QueryKbTool,
+  read_file: ReadFileTool,
+  replace: EditFileTool,
+  run_shell_command: ExecuteTool,
+  search_file: SearchFileTool,
+  search_file_content: SearchFileContentTool,
+  subagent_await: SubagentLifecycleTool,
+  subagent_cancel: SubagentLifecycleTool,
+  subagent_events: SubagentLifecycleTool,
+  subagent_start: SubagentLifecycleTool,
+  subagent_status: SubagentLifecycleTool,
+  task: TaskTool,
+  tavily_search: WebSearchTool,
+  text_to_img_qwen_image: ImageTool,
+  write_file: WriteFileTool,
+  write_todos: TodoListTool
 }
 
-// 识别逻辑
-const isWebSearchResult = computed(() => {
-  const name = toolName.value.toLowerCase()
-  return name.includes('tavily_search')
-})
+const currentRenderer = computed(() => TOOL_RENDERERS[toolId.value] || null)
+const isHidden = computed(() => isHiddenToolCall(props.toolCall))
 
-const isTaskResult = computed(() => {
-  let args = props.toolCall.args || props.toolCall.function?.arguments
-  if (typeof args === 'string') {
-    try {
-      args = JSON.parse(args)
-    } catch {
-      return false
-    }
-  }
-  return args && typeof args === 'object' && 'subagent_type' in args
-})
-
-const isKnowledgeBaseResult = computed(() => {
-  const databaseInfo = databases.value.find((db) => db.name === toolName.value)
-  if (databaseInfo && databaseInfo.kb_type !== 'lightrag') {
-    return true
-  }
-  return false
-})
-
-const isKnowledgeGraphResult = computed(() => {
-  const name = toolName.value.toLowerCase()
-  const hasGraphKeyword = name.includes('graph') || name.includes('图谱') || name.includes('kg')
-  const data = parseData(props.toolCall.tool_call_result?.content)
-  const hasBasicStructure = data && typeof data === 'object'
-  const hasTriples = hasBasicStructure && 'triples' in data
-  return (
-    (hasTriples && Array.isArray(data.triples) && data.triples.length > 0) ||
-    (hasTriples && hasGraphKeyword)
-  )
-})
-
-const isTodoListResult = computed(() => {
-  return toolName.value === 'write_todos'
-})
-
-const isCalculatorResult = computed(() => {
-  const name = toolName.value.toLowerCase()
-  return name.includes('calculator') || name.includes('calc') || name.includes('math')
-})
-
-const isImageResult = computed(() => {
-  const name = toolName.value.toLowerCase()
-  if (!name.includes('chart')) return false
-  const data = parseData(props.toolCall.tool_call_result?.content)
-  return data && typeof data === 'string' && data.startsWith('http')
-})
-
-const isWriteFileResult = computed(() => {
-  return toolName.value === 'write_file'
-})
-
-const isReadFileResult = computed(() => {
-  return toolName.value === 'read_file'
-})
-
-const isListDirectoryResult = computed(() => {
-  return toolName.value === 'list_directory' || toolName.value === 'ls'
-})
-
-const isSearchFileContentResult = computed(() => {
-  return toolName.value === 'search_file_content'
-})
-
-const isGlobResult = computed(() => {
-  return toolName.value === 'glob'
-})
-
-const isEditFileResult = computed(() => {
-  return toolName.value === 'edit_file' || toolName.value === 'replace'
-})
-
-// 处理知识图谱刷新
-const graphToolCallRef = ref(null)
+const toolRendererRef = ref(null)
 const refreshGraph = () => {
-  if (graphToolCallRef.value && typeof graphToolCallRef.value.refreshGraph === 'function') {
-    graphToolCallRef.value.refreshGraph()
+  if (toolRendererRef.value && typeof toolRendererRef.value.refreshGraph === 'function') {
+    toolRendererRef.value.refreshGraph()
   }
 }
 

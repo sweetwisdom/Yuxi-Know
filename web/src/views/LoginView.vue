@@ -3,7 +3,7 @@
     <!-- 服务状态提示 -->
     <div v-if="serverStatus === 'error'" class="server-status-alert">
       <div class="alert-content">
-        <exclamation-circle-outlined class="alert-icon" />
+        <exclamation-circle-icon class="alert-icon" size="20" />
         <div class="alert-text">
           <div class="alert-title">服务端连接失败</div>
           <div class="alert-message">{{ serverError }}</div>
@@ -17,17 +17,13 @@
     <!-- 顶部导航：品牌名称 & 操作按钮 -->
     <nav class="login-navbar">
       <div class="navbar-content">
-        <div class="brand-container">
+        <div class="brand-container" @click="goHome" style="cursor: pointer">
+          <img v-if="brandLogo" :src="brandLogo" alt="logo" class="brand-logo" />
           <h1 class="brand-text">
             <span v-if="brandOrgName" class="brand-org">{{ brandOrgName }}</span>
             <span v-if="brandOrgName && brandName !== brandOrgName" class="brand-separator"></span>
             <span class="brand-main">{{ brandName }}</span>
           </h1>
-        </div>
-        <div class="login-top-action">
-          <a-button type="text" size="small" class="back-home-btn" @click="goHome">
-            返回首页
-          </a-button>
         </div>
       </div>
     </nav>
@@ -44,9 +40,9 @@
         <div class="card-side is-form">
           <div class="form-wrapper">
             <header class="form-header">
-              <p class="welcome-text">欢迎登录</p>
               <!-- 如果是在初始化，显示特定标题 -->
               <h2 v-if="isFirstRun" class="init-title">系统初始化，请创建超级管理员</h2>
+              <p v-else class="welcome-text">欢迎登录</p>
             </header>
 
             <div class="login-content" :class="{ 'is-initializing': isFirstRun }">
@@ -54,24 +50,24 @@
               <div v-if="isFirstRun" class="login-form login-form--init">
                 <a-form :model="adminForm" @finish="handleInitialize" layout="vertical">
                   <a-form-item
-                    label="用户ID"
-                    name="user_id"
+                    label="UID"
+                    name="uid"
                     :rules="[
-                      { required: true, message: '请输入用户ID' },
+                      { required: true, message: '请输入UID' },
                       {
                         pattern: /^[a-zA-Z0-9_]+$/,
-                        message: '用户ID只能包含字母、数字和下划线'
+                        message: 'UID只能包含字母、数字和下划线'
                       },
                       {
                         min: 3,
                         max: 20,
-                        message: '用户ID长度必须在3-20个字符之间'
+                        message: 'UID长度必须在3-20个字符之间'
                       }
                     ]"
                   >
                     <a-input
-                      v-model:value="adminForm.user_id"
-                      placeholder="请输入用户ID（3-20个字符）"
+                      v-model:value="adminForm.uid"
+                      placeholder="请输入UID（3-20个字符）"
                       :maxlength="20"
                     />
                   </a-form-item>
@@ -103,9 +99,19 @@
                   <a-form-item
                     label="密码"
                     name="password"
-                    :rules="[{ required: true, message: '请输入密码' }]"
+                    :rules="[
+                      { required: true, message: '请输入密码' },
+                      {
+                        min: MIN_PASSWORD_LENGTH,
+                        message: `密码至少需要 ${MIN_PASSWORD_LENGTH} 个字符`
+                      }
+                    ]"
                   >
-                    <a-input-password v-model:value="adminForm.password" prefix-icon="lock" />
+                    <a-input-password
+                      v-model:value="adminForm.password"
+                      prefix-icon="lock"
+                      :minlength="MIN_PASSWORD_LENGTH"
+                    />
                   </a-form-item>
 
                   <a-form-item
@@ -122,6 +128,30 @@
                     />
                   </a-form-item>
 
+                  <a-form-item v-if="showAgreementConsent" class="agreement-form-item">
+                    <div class="agreement-row">
+                      <a-checkbox v-model:checked="agreementAccepted">
+                        登录即代表同意
+                        <a
+                          class="agreement-link"
+                          :href="userAgreementUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          @click.stop
+                          >《用户协议》</a
+                        >
+                        <a
+                          class="agreement-link"
+                          :href="privacyPolicyUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          @click.stop
+                          >《隐私协议》</a
+                        >
+                      </a-checkbox>
+                    </div>
+                  </a-form-item>
+
                   <a-form-item>
                     <a-button type="primary" html-type="submit" :loading="loading" block
                       >创建管理员账户</a-button
@@ -136,11 +166,11 @@
                   <a-form-item
                     label="登录账号"
                     name="loginId"
-                    :rules="[{ required: true, message: '请输入用户ID或手机号' }]"
+                    :rules="[{ required: true, message: '请输入UID或手机号' }]"
                   >
-                    <a-input v-model:value="loginForm.loginId" placeholder="用户ID或手机号">
+                    <a-input v-model:value="loginForm.loginId" placeholder="UID或手机号">
                       <template #prefix>
-                        <user-outlined />
+                        <user-icon size="18" />
                       </template>
                     </a-input>
                   </a-form-item>
@@ -152,17 +182,32 @@
                   >
                     <a-input-password v-model:value="loginForm.password">
                       <template #prefix>
-                        <lock-outlined />
+                        <lock-icon size="18" />
                       </template>
                     </a-input-password>
                   </a-form-item>
 
-                  <a-form-item>
-                    <div class="login-options">
-                      <a-checkbox v-model:checked="rememberMe" @click="showDevMessage"
-                        >记住我</a-checkbox
-                      >
-                      <a class="forgot-password" @click="showDevMessage">忘记密码?</a>
+                  <a-form-item v-if="showAgreementConsent" class="agreement-form-item">
+                    <div class="agreement-row">
+                      <a-checkbox v-model:checked="agreementAccepted">
+                        登录即代表同意
+                        <a
+                          class="agreement-link"
+                          :href="userAgreementUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          @click.stop
+                          >《用户协议》</a
+                        >
+                        <a
+                          class="agreement-link"
+                          :href="privacyPolicyUrl"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          @click.stop
+                          >《隐私协议》</a
+                        >
+                      </a-checkbox>
                     </div>
                   </a-form-item>
 
@@ -179,31 +224,34 @@
                       <span v-else>登录</span>
                     </a-button>
                   </a-form-item>
-
-                  <!-- 第三方登录选项 -->
-                  <div class="third-party-login">
-                    <div class="divider">
-                      <span>其他登录方式</span>
-                    </div>
-                    <div class="login-icons">
-                      <a-tooltip title="微信登录">
-                        <a-button shape="circle" class="login-icon" @click="showDevMessage">
-                          <template #icon><wechat-outlined /></template>
-                        </a-button>
-                      </a-tooltip>
-                      <a-tooltip title="企业微信登录">
-                        <a-button shape="circle" class="login-icon" @click="showDevMessage">
-                          <template #icon><qrcode-outlined /></template>
-                        </a-button>
-                      </a-tooltip>
-                      <a-tooltip title="飞书登录">
-                        <a-button shape="circle" class="login-icon" @click="showDevMessage">
-                          <template #icon><thunderbolt-outlined /></template>
-                        </a-button>
-                      </a-tooltip>
-                    </div>
-                  </div>
                 </a-form>
+
+                <!-- OIDC 登录选项  -->
+                <div v-if="oidcChecking || oidcEnabled" class="third-party-login">
+                  <div class="divider">
+                    <span>或使用以下方式登录</span>
+                  </div>
+                  <div class="login-icons">
+                    <!-- 检查中显示骨架屏 -->
+                    <div v-if="oidcChecking" class="login-skeleton">
+                      <a-skeleton-button block size="large" :active="true" />
+                    </div>
+                    <!-- 检查完成后显示按钮 -->
+                    <a-button
+                      v-else
+                      type="default"
+                      size="large"
+                      block
+                      :loading="oidcLoading"
+                      @click="handleOIDCLogin"
+                    >
+                      <template #icon>
+                        <key-icon size="18" />
+                      </template>
+                      {{ oidcButtonText }}
+                    </a-button>
+                  </div>
+                </div>
               </div>
 
               <!-- 错误提示 -->
@@ -221,11 +269,7 @@
       <div class="footer-links">
         <a href="https://github.com/xerrors" target="_blank">联系我们</a>
         <span class="divider">|</span>
-        <a href="https://github.com/xerrors/Yuxi-Know" target="_blank">使用帮助</a>
-        <span class="divider">|</span>
-        <a href="https://github.com/xerrors/Yuxi-Know/blob/main/LICENSE" target="_blank"
-          >隐私政策</a
-        >
+        <a href="https://github.com/xerrors/Yuxi" target="_blank">使用帮助</a>
       </div>
       <div class="copyright">
         &copy; {{ new Date().getFullYear() }} {{ brandName }}. All Rights Reserved.
@@ -236,21 +280,24 @@
 
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useInfoStore } from '@/stores/info'
 import { useAgentStore } from '@/stores/agent'
 import { message } from 'ant-design-vue'
 import { healthApi } from '@/apis/system_api'
+import { authApi } from '@/apis/auth_api'
 import {
-  UserOutlined,
-  LockOutlined,
-  WechatOutlined,
-  QrcodeOutlined,
-  ThunderboltOutlined,
-  ExclamationCircleOutlined
-} from '@ant-design/icons-vue'
+  User as UserIcon,
+  Lock as LockIcon,
+  Key as KeyIcon,
+  AlertCircle as ExclamationCircleIcon
+} from 'lucide-vue-next'
+import { tryAutoStartOIDC, sanitizeRedirect } from '@/utils/oidcAutoStart'
+import { MIN_PASSWORD_LENGTH } from '@/utils/passwordValidation'
+
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const infoStore = useInfoStore()
 const agentStore = useAgentStore()
@@ -259,12 +306,15 @@ const agentStore = useAgentStore()
 const loginBgImage = computed(() => {
   return infoStore.organization?.login_bg || '/login-bg.jpg'
 })
+const brandLogo = computed(() => {
+  return infoStore.organization?.logo || ''
+})
 const brandOrgName = computed(() => {
   return infoStore.organization?.name?.trim() || ''
 })
 const brandName = computed(() => {
   const orgName = brandOrgName.value
-  const brandNameRaw = infoStore.branding?.name?.trim() || 'Yuxi-Know'
+  const brandNameRaw = infoStore.branding?.name?.trim() || 'Yuxi'
 
   if (orgName && brandNameRaw && orgName !== brandNameRaw) {
     return brandNameRaw
@@ -272,25 +322,30 @@ const brandName = computed(() => {
 
   return orgName || brandNameRaw
 })
-const brandSubtitle = computed(() => {
-  const rawSubtitle = infoStore.branding?.subtitle ?? ''
-  const trimmed = rawSubtitle.trim()
-  return trimmed || '大模型驱动的知识库管理工具'
+const userAgreementUrl = computed(() => {
+  return infoStore.footer?.user_agreement_url?.trim() || ''
 })
-const brandDescription = computed(() => {
-  const rawDescription = infoStore.branding?.description ?? ''
-  const trimmed = rawDescription.trim()
-  return trimmed || '结合知识库与知识图谱，提供更准确、更全面的回答'
+const privacyPolicyUrl = computed(() => {
+  return infoStore.footer?.privacy_policy_url?.trim() || ''
+})
+const showAgreementConsent = computed(() => {
+  return Boolean(userAgreementUrl.value && privacyPolicyUrl.value)
 })
 
 // 状态
 const isFirstRun = ref(false)
 const loading = ref(false)
 const errorMessage = ref('')
-const rememberMe = ref(false)
+const agreementAccepted = ref(false)
 const serverStatus = ref('loading')
 const serverError = ref('')
 const healthChecking = ref(false)
+
+// OIDC 相关状态
+const oidcEnabled = ref(false)
+const oidcLoading = ref(false)
+const oidcChecking = ref(true)
+const oidcButtonText = ref('OIDC 登录')
 
 // 登录锁定相关状态
 const isLocked = ref(false)
@@ -299,22 +354,17 @@ const lockCountdown = ref(null)
 
 // 登录表单
 const loginForm = reactive({
-  loginId: '', // 支持user_id或phone_number登录
+  loginId: '', // 支持uid或phone_number登录
   password: ''
 })
 
 // 管理员初始化表单
 const adminForm = reactive({
-  user_id: '', // 改为直接输入user_id
+  uid: '', // 改为直接输入uid
   password: '',
   confirmPassword: '',
   phone_number: '' // 手机号字段（可选）
 })
-
-// 开发中功能提示
-const showDevMessage = () => {
-  message.info('该功能正在开发中，敬请期待！')
-}
 
 const goHome = () => {
   router.push('/')
@@ -373,11 +423,25 @@ const validateConfirmPassword = async (rule, value) => {
   }
 }
 
+const ensureAgreementAccepted = () => {
+  if (!showAgreementConsent.value || agreementAccepted.value) {
+    return true
+  }
+
+  const warningMessage = '请先阅读并同意《用户协议》《隐私协议》'
+  message.warning(warningMessage)
+  return false
+}
+
 // 处理登录
 const handleLogin = async () => {
   // 如果当前被锁定，不允许登录
   if (isLocked.value) {
     message.warning(`账户被锁定，请等待 ${formatTime(lockRemainingTime.value)}`)
+    return
+  }
+
+  if (!ensureAgreementAccepted()) {
     return
   }
 
@@ -399,36 +463,13 @@ const handleLogin = async () => {
 
     // 根据用户角色决定重定向目标
     if (redirectPath === '/') {
-      // 如果是管理员，直接跳转到/chat页面
-      if (userStore.isAdmin) {
-        router.push('/agent')
-        return
-      }
-
-      // 普通用户跳转到默认智能体
+      // 统一跳转到聊天页面（管理员与普通用户共享同一聊天界面）
       try {
-        // 初始化agentStore并获取智能体信息
         await agentStore.initialize()
-
-        // 尝试获取默认智能体
-        if (agentStore.defaultAgentId) {
-          // 如果存在默认智能体，直接跳转
-          router.push(`/agent/${agentStore.defaultAgentId}`)
-          return
-        }
-
-        // 没有默认智能体，获取第一个可用智能体
-        const agentIds = Object.keys(agentStore.agents)
-        if (agentIds.length > 0) {
-          router.push(`/agent/${agentIds[0]}`)
-          return
-        }
-
-        // 没有可用智能体，回退到首页
-        router.push('/')
+        router.push('/agent')
       } catch (error) {
         console.error('获取智能体信息失败:', error)
-        router.push('/')
+        router.push('/agent')
       }
     } else {
       // 跳转到其他预设的路径
@@ -470,8 +511,62 @@ const handleLogin = async () => {
   }
 }
 
+// 处理 OIDC 登录
+const handleOIDCLogin = async () => {
+  if (!ensureAgreementAccepted()) {
+    return
+  }
+
+  try {
+    oidcLoading.value = true
+    errorMessage.value = ''
+
+    // 获取 OIDC 登录 URL
+    const response = await authApi.getOIDCLoginUrl()
+    if (response.login_url) {
+      // 保存当前路径，以便登录后返回
+      const redirectPath =
+        sessionStorage.getItem('redirect') || router.currentRoute.value.query.redirect || '/'
+      sessionStorage.setItem('oidc_redirect', redirectPath)
+
+      // 跳转到 OIDC Provider
+      window.location.href = response.login_url
+    } else {
+      errorMessage.value = '获取 OIDC 登录地址失败'
+    }
+  } catch (error) {
+    console.error('OIDC 登录失败:', error)
+    errorMessage.value = error.message || 'OIDC 登录失败，请重试'
+  } finally {
+    oidcLoading.value = false
+  }
+}
+
+// 检查 OIDC 配置
+const checkOIDCConfig = async () => {
+  oidcChecking.value = true
+  try {
+    const config = await authApi.getOIDCConfig()
+    oidcEnabled.value = config.enabled
+    if (config.provider_name) {
+      oidcButtonText.value = config.provider_name
+    }
+    return config
+  } catch (error) {
+    console.error('检查 OIDC 配置失败:', error)
+    oidcEnabled.value = false
+    return null
+  } finally {
+    oidcChecking.value = false
+  }
+}
+
 // 处理初始化管理员
 const handleInitialize = async () => {
+  if (!ensureAgreementAccepted()) {
+    return
+  }
+
   try {
     loading.value = true
     errorMessage.value = ''
@@ -482,7 +577,7 @@ const handleInitialize = async () => {
     }
 
     await userStore.initialize({
-      user_id: adminForm.user_id,
+      uid: adminForm.uid,
       password: adminForm.password,
       phone_number: adminForm.phone_number || null // 空字符串转为null
     })
@@ -533,10 +628,15 @@ const checkServerHealth = async () => {
 
 // 组件挂载时
 onMounted(async () => {
-  // 如果已登录，跳转到首页
+  // 如果已登录，按 redirect 参数跳转（不固定跳首页）
   if (userStore.isLoggedIn) {
-    router.push('/')
+    router.push(sanitizeRedirect(route.query.redirect))
     return
+  }
+
+  // 显示 OIDC 认证失败的错误信息（由后端重定向携带）
+  if (route.query.oidc_error) {
+    errorMessage.value = String(route.query.oidc_error)
   }
 
   // 首先检查服务器健康状态
@@ -544,6 +644,19 @@ onMounted(async () => {
 
   // 检查是否是首次运行
   await checkFirstRunStatus()
+
+  // 如果处于首次运行状态，不需要 OIDC 自动登录
+  if (isFirstRun.value) {
+    return
+  }
+
+  // 检查 OIDC 配置完成后，尝试自动触发 OIDC 登录（跨系统跳转场景）
+  const config = await checkOIDCConfig()
+  if (config && config.enabled) {
+    const autoStarted = await tryAutoStartOIDC(async () => await authApi.getOIDCLoginUrl(), config)
+    // 如果已发起 OIDC 跳转，页面会被重定向，不需要继续
+    if (autoStarted) return
+  }
 })
 
 // 组件卸载时清理定时器
@@ -584,6 +697,11 @@ onUnmounted(() => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    .brand-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
   }
 }
 
@@ -615,6 +733,18 @@ onUnmounted(() => {
   }
 }
 
+.brand-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
+.top-logo {
+  height: 32px;
+  width: auto;
+  object-fit: contain;
+}
+
 .back-home-btn {
   color: var(--gray-600);
   font-size: 14px;
@@ -638,7 +768,6 @@ onUnmounted(() => {
   width: 900px;
   max-width: 95vw;
   height: 560px;
-  max-height: 80vh;
   background: var(--gray-0);
   border-radius: 16px;
   box-shadow: 0 0px 40px var(--shadow-1);
@@ -710,6 +839,14 @@ onUnmounted(() => {
     font-size: 16px;
     border-radius: 8px;
   }
+  :deep(.ant-input-prefix) {
+    margin-right: 8px;
+    color: var(--gray-500);
+  }
+}
+
+.login-form.login-form--init :deep(.ant-form-item) {
+  margin-bottom: 14px;
 }
 
 .third-party-login {
@@ -743,38 +880,59 @@ onUnmounted(() => {
   }
 
   .login-icons {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
-    .login-icon {
-      width: 36px;
-      height: 36px;
-      font-size: 18px;
-      color: var(--gray-500);
-      border-color: var(--gray-300);
+    :deep(.ant-btn) {
       display: flex;
       align-items: center;
       justify-content: center;
-      transition: all 0.2s ease;
+      gap: 8px;
+      border-color: var(--gray-300);
+      color: var(--gray-700);
+
       &:hover {
-        color: var(--main-color);
         border-color: var(--main-color);
+        color: var(--main-color);
         background-color: var(--main-10);
-        transform: translateY(-2px);
       }
+
+      .anticon,
+      svg {
+        color: var(--main-color);
+      }
+    }
+  }
+
+  /* 修复：添加骨架屏样式 */
+  .login-skeleton {
+    :deep(.ant-skeleton-button) {
+      width: 100% !important;
+      height: 44px;
+      border-radius: 8px;
     }
   }
 }
 
-.login-options {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 14px;
+.agreement-form-item {
+  margin-bottom: 12px;
 }
 
-.forgot-password {
+.agreement-row {
+  font-size: 13px;
+  color: var(--gray-600);
+  line-height: 1.6;
+
+  :deep(.ant-checkbox-wrapper) {
+    display: inline-flex;
+    align-items: flex-start;
+  }
+
+  :deep(.ant-checkbox + span) {
+    padding-inline-start: 8px;
+  }
+}
+
+.agreement-link {
   color: var(--main-color);
+
   &:hover {
     text-decoration: underline;
   }

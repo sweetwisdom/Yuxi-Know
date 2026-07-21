@@ -12,11 +12,7 @@
             type="primary"
             @click="chunkData"
             :loading="chunkLoading"
-            :disabled="
-              uploadMode === 'url'
-                ? !urlList.some((i) => i.status === 'success')
-                : fileList.length === 0
-            "
+            :disabled="!canSubmit"
           >
             添加到知识库
           </a-button>
@@ -70,7 +66,7 @@
           </div>
           <div class="col-item" v-if="uploadMode !== 'url'">
             <div class="setting-label">
-              OCR 引擎
+              OCR 引擎（仅应用于 PDF/图片文件）
               <a-tooltip title="检查服务状态">
                 <ReloadOutlined
                   class="action-icon refresh-icon"
@@ -80,25 +76,79 @@
               </a-tooltip>
             </div>
             <div class="setting-content">
-              <a-select
-                v-model:value="chunkParams.enable_ocr"
-                :options="enableOcrOptions"
-                style="width: 100%"
-                :disabled="ocrHealthChecking"
-                class="ocr-select"
-              />
-              <p class="param-description">
-                <template v-if="!isOcrEnabled"> 不启用 OCR，仅处理文本文件 </template>
-                <template v-else-if="selectedOcrStatus === 'healthy'">
-                  {{ selectedOcrMessage || '服务正常' }}
+              <a-popover
+                v-model:open="ocrPanelOpen"
+                placement="bottomLeft"
+                trigger="click"
+                overlayClassName="ocr-engine-popover"
+                @openChange="handleOcrPanelOpenChange"
+              >
+                <template #content>
+                  <div class="ocr-engine-panel">
+                    <button
+                      v-for="option in availableOcrOptions"
+                      :key="option.value"
+                      type="button"
+                      class="ocr-engine-option"
+                      :class="{ selected: processingParams.ocr_engine === option.value }"
+                      :disabled="chunkLoading"
+                      @click="selectOcrEngine(option.value)"
+                    >
+                      <span class="ocr-engine-option-header">
+                        <span class="ocr-engine-name">{{ option.label }}</span>
+                        <span
+                          class="ocr-engine-status"
+                          :class="`status-${getOcrStatus(option.value)}`"
+                        >
+                          {{ getOcrStatusLabel(option.value) }}
+                        </span>
+                      </span>
+                      <span class="ocr-engine-desc">{{ getOcrDescription(option.value) }}</span>
+                    </button>
+
+                    <div v-if="unavailableOcrOptions.length" class="unavailable-ocr-options">
+                      <button
+                        type="button"
+                        class="unavailable-toggle"
+                        @click="toggleUnavailableOcrOptions"
+                      >
+                        <span>不可用选项（{{ unavailableOcrOptions.length }}）</span>
+                        <ChevronUp v-if="unavailableOcrExpanded" :size="14" />
+                        <ChevronDown v-else :size="14" />
+                      </button>
+
+                      <div v-if="unavailableOcrExpanded" class="unavailable-ocr-list">
+                        <button
+                          v-for="option in unavailableOcrOptions"
+                          :key="option.value"
+                          type="button"
+                          class="ocr-engine-option disabled"
+                          disabled
+                        >
+                          <span class="ocr-engine-option-header">
+                            <span class="ocr-engine-name">{{ option.label }}</span>
+                            <span
+                              class="ocr-engine-status"
+                              :class="`status-${getOcrStatus(option.value)}`"
+                            >
+                              {{ getOcrStatusLabel(option.value) }}
+                            </span>
+                          </span>
+                          <span class="ocr-engine-desc">{{ getOcrDescription(option.value) }}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
                 </template>
-                <template v-else-if="selectedOcrStatus === 'unknown'">
-                  点击刷新图标检查服务状态
-                </template>
-                <template v-else>
-                  {{ selectedOcrMessage || '服务异常' }}
-                </template>
-              </p>
+
+                <a-button class="ocr-engine-trigger" block>
+                  <span class="ocr-engine-trigger-main">
+                    <ReloadOutlined v-if="ocrHealthChecking" class="ocr-engine-trigger-loading" />
+                    <span class="ocr-engine-trigger-label">{{ selectedOcrEngineLabel }}</span>
+                  </span>
+                  <ChevronDown :size="14" />
+                </a-button>
+              </a-popover>
             </div>
           </div>
         </div>
@@ -108,15 +158,16 @@
           <div class="col-item">
             <div class="setting-label">入库参数配置</div>
             <div class="setting-content">
-              <template v-if="!isGraphBased">
-                <ChunkParamsConfig :temp-chunk-params="indexParams" :show-qa-split="true" />
-              </template>
-              <template v-else>
-                <div class="lightrag-tip">
-                  <Info :size="14" style="margin-right: 6px" />
-                  <span>LightRAG 将使用默认参数自动入库</span>
-                </div>
-              </template>
+              <ChunkParamsConfig
+                :temp-chunk-params="indexParams"
+                :show-qa-split="true"
+                :show-chunk-size-overlap="true"
+                :show-preset="true"
+                :allow-preset-follow-default="true"
+                :database-preset-id="
+                  store.database?.additional_params?.chunk_preset_id || 'general'
+                "
+              />
             </div>
           </div>
         </div>
@@ -129,7 +180,7 @@
       </div>
 
       <!-- 文件上传区域 -->
-      <div class="upload-area" v-if="uploadMode !== 'url'">
+      <div class="upload-area" v-if="uploadMode === 'file' || uploadMode === 'folder'">
         <a-upload-dragger
           class="custom-dragger"
           v-model:fileList="fileList"
@@ -137,10 +188,11 @@
           :multiple="true"
           :directory="isFolderUpload"
           :disabled="chunkLoading"
+          :show-upload-list="!showAggregateProgress"
           :accept="acceptedFileTypes"
           :before-upload="beforeUpload"
           :customRequest="customRequest"
-          :action="'/api/knowledge/files/upload?db_id=' + databaseId"
+          :action="'/api/knowledge/files/upload?kb_id=' + kbId"
           :headers="getAuthHeaders()"
           @change="handleFileUpload"
           @drop="handleDrop"
@@ -149,6 +201,126 @@
           <p class="ant-upload-hint">支持类型: {{ uploadHint }}</p>
           <div class="zip-tip" v-if="hasZipFiles">📦 ZIP包将自动解压提取 Markdown 与图片</div>
         </a-upload-dragger>
+
+        <div v-if="showAggregateProgress" class="upload-progress-card">
+          <div class="progress-header">
+            <div class="progress-header-left">
+              <div class="progress-title">上传进度</div>
+              <div class="progress-stats inline-in-header">
+                <div class="stat-pill">总计 {{ totalUploadCount }}</div>
+                <div class="stat-pill uploading" v-if="uploadingUploadCount > 0">
+                  上传中 {{ uploadingUploadCount }}
+                </div>
+                <div class="stat-pill queued" v-if="queuedUploadCount > 0">
+                  排队 {{ queuedUploadCount }}
+                </div>
+                <div class="stat-pill error" v-if="failedUploadCount > 0">
+                  失败 {{ failedUploadCount }}
+                </div>
+              </div>
+            </div>
+            <div class="progress-header-right">
+              <div class="progress-percent">{{ overallUploadProgress }}%</div>
+              <a-button
+                type="text"
+                size="small"
+                class="toggle-progress-btn"
+                @click="progressExpanded = !progressExpanded"
+              >
+                <span>{{ progressExpanded ? '收起' : '展开' }}</span>
+                <ChevronUp v-if="progressExpanded" :size="14" />
+                <ChevronDown v-else :size="14" />
+              </a-button>
+            </div>
+          </div>
+
+          <div v-if="progressExpanded" class="progress-details">
+            <div class="details-list" v-if="failedDetailItems.length > 0">
+              <div v-for="item in failedDetailItems" :key="item.uid" class="detail-row">
+                <span class="detail-name" :title="item.name">{{ item.name }}</span>
+                <span class="detail-error" :title="item.errorText">{{ item.errorText }}</span>
+              </div>
+            </div>
+
+            <div class="progress-tip" v-else>当前无失败文件。</div>
+
+            <div class="progress-tip" v-if="hasPendingUploads">
+              文件夹上传采用队列模式，最多同时上传 {{ MAX_UPLOAD_CONCURRENCY }} 个文件。
+            </div>
+            <div class="progress-tip" v-else>上传队列已完成，可点击“添加到知识库”继续下一步。</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 工作区文件选择区域 -->
+      <div class="workspace-area" v-if="uploadMode === 'workspace'">
+        <div class="workspace-toolbar">
+          <div class="workspace-summary">
+            <FolderOpen :size="16" />
+            <span class="workspace-current-path" :title="workspaceCurrentPath">
+              {{ workspaceCurrentPath }}
+            </span>
+            <span
+              >已选择
+              {{ selectedWorkspacePaths.length }}
+              个文件，注意上传会扁平化上传，不保留文件层级结构</span
+            >
+          </div>
+          <div class="workspace-actions">
+            <a-button
+              size="small"
+              class="lucide-icon-btn"
+              :disabled="workspaceCurrentPath === '/' || workspaceLoading"
+              @click="openWorkspaceParent"
+            >
+              <ArrowLeft :size="14" />
+            </a-button>
+            <a-button
+              size="small"
+              @click="loadWorkspaceFiles()"
+              :loading="workspaceLoading"
+              class="lucide-icon-btn"
+            >
+              <RotateCw :size="14" />
+            </a-button>
+          </div>
+        </div>
+
+        <div class="workspace-list" v-if="workspaceItems.length > 0">
+          <button
+            v-for="item in workspaceDirectoryItems"
+            :key="item.path"
+            type="button"
+            class="workspace-item workspace-directory"
+            :disabled="chunkLoading"
+            @click="openWorkspaceDirectory(item.path)"
+          >
+            <a-checkbox disabled />
+            <FileTypeIcon is-dir :size="16" class="workspace-file-icon" />
+            <span class="workspace-file-name" :title="item.path">{{ item.name }}</span>
+          </button>
+
+          <label
+            v-for="item in workspaceFileItems"
+            :key="item.path"
+            class="workspace-item"
+            :class="{ disabled: !item.supported }"
+          >
+            <a-checkbox
+              :checked="selectedWorkspacePathSet.has(item.path)"
+              :disabled="!item.supported || chunkLoading"
+              @change="toggleWorkspacePath(item.path, $event.target.checked)"
+            />
+            <FileTypeIcon :name="item.path" :size="16" class="workspace-file-icon" />
+            <span class="workspace-file-name" :title="item.path">{{ item.path }}</span>
+            <span class="workspace-file-size">{{ formatFileSize(item.size) }}</span>
+          </label>
+        </div>
+
+        <div class="url-empty-tip" v-else>
+          <Info :size="16" />
+          <span>{{ workspaceLoading ? '正在加载工作区文件' : '当前目录暂无文件' }}</span>
+        </div>
       </div>
 
       <!-- URL 输入区域 -->
@@ -243,26 +415,33 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { message, Upload, Tooltip, Modal } from 'ant-design-vue'
+import { ref, computed, onMounted, watch, h } from 'vue'
+import { message, Upload, Modal } from 'ant-design-vue'
 import { useUserStore } from '@/stores/user'
+import { useConfigStore } from '@/stores/config'
 import { useDatabaseStore } from '@/stores/database'
 import { ocrApi } from '@/apis/system_api'
 import { fileApi, documentApi } from '@/apis/knowledge_api'
-import { CheckCircleFilled, ReloadOutlined } from '@ant-design/icons-vue'
+import { getWorkspaceTree } from '@/apis/workspace_api'
+import { ReloadOutlined } from '@ant-design/icons-vue'
 import {
   FileUp,
   FolderUp,
+  FolderOpen,
+  ArrowLeft,
   RotateCw,
   CircleHelp,
   Info,
   Download,
   Trash2,
   Link,
-  X
+  X,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-vue-next'
-import { h } from 'vue'
+import { buildChunkParamsPayload } from '@/utils/chunkUtils'
 import ChunkParamsConfig from '@/components/ChunkParamsConfig.vue'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 
 const props = defineProps({
   visible: {
@@ -290,6 +469,8 @@ const props = defineProps({
 const emit = defineEmits(['update:visible', 'success'])
 
 const store = useDatabaseStore()
+const configStore = useConfigStore()
+const DEFAULT_OCR_ENGINE = 'rapid_ocr'
 
 // 文件夹选择相关
 const selectedFolderId = ref(null)
@@ -315,9 +496,14 @@ watch(
   () => props.visible,
   (newVal) => {
     if (newVal) {
+      ocrEngineTouched.value = false
+      applyDefaultOcrEngine()
       selectedFolderId.value = props.currentFolderId
       isFolderUpload.value = props.isFolderMode
       uploadMode.value = props.mode || (props.isFolderMode ? 'folder' : 'file')
+      if (uploadMode.value === 'workspace') {
+        loadWorkspaceFiles()
+      }
     }
   }
 )
@@ -400,13 +586,77 @@ const visible = computed({
   set: (value) => emit('update:visible', value)
 })
 
-const databaseId = computed(() => store.databaseId)
-const kbType = computed(() => store.database.kb_type)
+const kbId = computed(() => store.kbId)
 const chunkLoading = computed(() => store.state.chunkLoading)
 
 // 上传模式
 const uploadMode = ref('file')
-const previousOcrSelection = ref('disable')
+const MAX_UPLOAD_CONCURRENCY = 10
+
+// 文件列表
+const fileList = ref([])
+
+const uploadQueue = ref([])
+const activeUploadCount = ref(0)
+const uploadTaskStatus = ref({})
+const uploadTaskProgress = ref({})
+const progressExpanded = ref(false)
+
+const totalUploadCount = computed(() => fileList.value.length)
+const queuedUploadCount = computed(
+  () => Object.values(uploadTaskStatus.value).filter((status) => status === 'queued').length
+)
+const uploadingUploadCount = computed(
+  () => Object.values(uploadTaskStatus.value).filter((status) => status === 'uploading').length
+)
+const successUploadCount = computed(
+  () => Object.values(uploadTaskStatus.value).filter((status) => status === 'done').length
+)
+const failedUploadCount = computed(
+  () => Object.values(uploadTaskStatus.value).filter((status) => status === 'error').length
+)
+const hasPendingUploads = computed(() => queuedUploadCount.value + uploadingUploadCount.value > 0)
+
+const overallUploadProgress = computed(() => {
+  const total = totalUploadCount.value
+  if (!total) {
+    return 0
+  }
+  const validUidSet = new Set(fileList.value.map((file) => file.uid).filter(Boolean))
+  let sum = 0
+  for (const uid of validUidSet) {
+    sum += uploadTaskProgress.value[uid] || 0
+  }
+  return Math.round(sum / total)
+})
+
+const showAggregateProgress = computed(() => totalUploadCount.value >= MAX_UPLOAD_CONCURRENCY)
+
+const failedDetailItems = computed(() => {
+  return fileList.value
+    .map((file) => {
+      const uid = file.uid
+      const rawStatus = uploadTaskStatus.value[uid] || file.status || 'unknown'
+      const detail = file?.response?.detail || file?.error?.message || ''
+      return {
+        uid,
+        name: file.name || '未命名文件',
+        status: rawStatus,
+        errorText: detail || '上传失败'
+      }
+    })
+    .filter((item) => item.status === 'error')
+})
+
+const canSubmit = computed(() => {
+  if (uploadMode.value === 'url') {
+    return urlList.value.some((item) => item.status === 'success')
+  }
+  if (uploadMode.value === 'workspace') {
+    return selectedWorkspacePaths.value.length > 0 && !workspaceLoading.value
+  }
+  return successUploadCount.value > 0 && !hasPendingUploads.value
+})
 
 const uploadModeOptions = computed(() => [
   {
@@ -429,6 +679,13 @@ const uploadModeOptions = computed(() => [
       h(Link, { size: 16, class: 'option-icon' }),
       h('span', { class: 'option-text' }, '解析 URL')
     ])
+  },
+  {
+    value: 'workspace',
+    label: h('div', { class: 'segmented-option' }, [
+      h(FolderOpen, { size: 16, class: 'option-icon' }),
+      h('span', { class: 'option-text' }, '工作区')
+    ])
   }
 ])
 
@@ -439,16 +696,47 @@ watch(uploadMode, (val) => {
   sameNameFiles.value = []
   urlList.value = []
   newUrl.value = ''
+  selectedWorkspacePaths.value = []
+  workspaceCurrentPath.value = '/'
+  workspaceItems.value = []
+  for (const task of uploadQueue.value) {
+    task.canceled = true
+  }
+  uploadQueue.value = []
+  uploadTaskStatus.value = {}
+  uploadTaskProgress.value = {}
+  progressExpanded.value = false
+  if (val === 'workspace') {
+    loadWorkspaceFiles('/')
+  }
 })
 
-// 文件列表
-const fileList = ref([])
+watch(fileList, (newFileList) => {
+  const validUidSet = new Set(newFileList.map((file) => file.uid).filter(Boolean))
+  const nextStatus = {}
+  const nextProgress = {}
+
+  for (const [uid, status] of Object.entries(uploadTaskStatus.value)) {
+    if (validUidSet.has(uid)) {
+      nextStatus[uid] = status
+    }
+  }
+  for (const [uid, progress] of Object.entries(uploadTaskProgress.value)) {
+    if (validUidSet.has(uid)) {
+      nextProgress[uid] = progress
+    }
+  }
+
+  uploadTaskStatus.value = nextStatus
+  uploadTaskProgress.value = nextProgress
+})
 
 // URL 列表
 // Item structure: { url: string, status: 'fetching'|'success'|'error', data: object|null, error: string }
 const urlList = ref([])
 const newUrl = ref('')
 const fetchingUrls = ref(false)
+const CONTENT_EXISTS_ERROR_TEXT = '内容已存在于知识库中'
 
 // 同名文件列表（用于显示提示）
 const sameNameFiles = ref([])
@@ -458,8 +746,40 @@ const isValidUrl = (string) => {
   try {
     const url = new URL(string)
     return url.protocol === 'http:' || url.protocol === 'https:'
-  } catch (_) {
+  } catch {
     return false
+  }
+}
+
+const mergeSameNameFiles = (sameNameList = []) => {
+  if (!Array.isArray(sameNameList) || sameNameList.length === 0) {
+    return
+  }
+  const existingIds = new Set(sameNameFiles.value.map((f) => f.file_id))
+  const newConflicts = sameNameList.filter((f) => !existingIds.has(f.file_id))
+  sameNameFiles.value.push(...newConflicts)
+}
+
+const fetchSingleUrlItem = async (item) => {
+  item.status = 'fetching'
+  try {
+    const res = await fileApi.fetchUrl(item.url, kbId.value)
+    item.status = 'success'
+    item.data = res
+    mergeSameNameFiles(res.same_name_files)
+  } catch (error) {
+    console.error('Failed to fetch URL:', error)
+    item.status = 'error'
+
+    const detailData = error.response?.data?.detail
+    const detailMessage =
+      (typeof detailData === 'string' ? detailData : detailData?.message) || error.message || ''
+    if (detailMessage.includes('same content') || detailMessage.includes('相同内容')) {
+      item.error = CONTENT_EXISTS_ERROR_TEXT
+      mergeSameNameFiles(detailData?.same_name_files)
+    } else {
+      item.error = detailMessage || '加载失败'
+    }
   }
 }
 
@@ -496,37 +816,7 @@ const handleFetchUrls = async () => {
   newUrl.value = '' // 清空输入框
   fetchingUrls.value = true
 
-  // 2. 并发处理
-  // 为避免过多并发请求，可以考虑使用 p-limit 或简单的分批，但此处直接并发
-  const processItem = async (item) => {
-    item.status = 'fetching'
-    try {
-      const res = await fileApi.fetchUrl(item.url, databaseId.value)
-      item.status = 'success'
-      item.data = res
-
-      // 处理同名文件冲突提示
-      if (res.has_same_name && res.same_name_files && res.same_name_files.length > 0) {
-        // 合并到现有的同名文件列表中，去重
-        const existingIds = new Set(sameNameFiles.value.map((f) => f.file_id))
-        const newConflicts = res.same_name_files.filter((f) => !existingIds.has(f.file_id))
-        sameNameFiles.value.push(...newConflicts)
-      }
-    } catch (error) {
-      console.error('Failed to fetch URL:', error)
-      item.status = 'error'
-
-      // 特别处理内容重复 (409)
-      const detail = error.response?.data?.detail || error.message || ''
-      if (detail.includes('same content') || detail.includes('相同内容')) {
-        item.error = '内容已存在于知识库中'
-      } else {
-        item.error = detail || '加载失败'
-      }
-    }
-  }
-
-  await Promise.all(newItems.map(processItem))
+  await Promise.all(newItems.map(fetchSingleUrlItem))
   fetchingUrls.value = false
 }
 
@@ -534,55 +824,110 @@ const removeUrl = (index) => {
   urlList.value.splice(index, 1)
 }
 
-const handleUrlKeydown = (e) => {
-  // Ctrl + Enter 提交
-  if (e.key === 'Enter' && e.ctrlKey) {
-    e.preventDefault()
-    handleFetchUrls()
+// 工作区文件选择
+const workspaceLoading = ref(false)
+const workspaceItems = ref([])
+const workspaceCurrentPath = ref('/')
+const selectedWorkspacePaths = ref([])
+const selectedWorkspacePathSet = computed(() => new Set(selectedWorkspacePaths.value))
+const workspaceDirectoryItems = computed(() => workspaceItems.value.filter((entry) => entry.is_dir))
+const workspaceFileItems = computed(() =>
+  workspaceItems.value
+    .filter((entry) => !entry.is_dir)
+    .map((entry) => ({
+      ...entry,
+      supported: isSupportedExtension(entry.name || entry.path)
+    }))
+)
+
+const formatFileSize = (size) => {
+  if (!Number.isFinite(size)) return '-'
+  if (size < 1024) return `${size} B`
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`
+  return `${(size / 1024 / 1024).toFixed(1)} MB`
+}
+
+const loadWorkspaceFiles = async (path = workspaceCurrentPath.value) => {
+  if (workspaceLoading.value) return
+  const targetPath = typeof path === 'string' ? path : workspaceCurrentPath.value
+
+  workspaceLoading.value = true
+  try {
+    const data = await getWorkspaceTree(targetPath, false, false)
+    const entries = Array.isArray(data?.entries) ? data.entries : []
+    workspaceCurrentPath.value = targetPath
+    workspaceItems.value = entries
+  } catch (error) {
+    console.error('加载工作区文件失败:', error)
+    message.error('加载工作区文件失败: ' + (error.message || '未知错误'))
+  } finally {
+    workspaceLoading.value = false
   }
+}
+
+const openWorkspaceDirectory = (path) => {
+  loadWorkspaceFiles(path)
+}
+
+const openWorkspaceParent = () => {
+  if (workspaceCurrentPath.value === '/') return
+  const normalized = workspaceCurrentPath.value.replace(/\/$/, '')
+  const index = normalized.lastIndexOf('/')
+  const parentPath = index <= 0 ? '/' : normalized.slice(0, index)
+  loadWorkspaceFiles(parentPath)
+}
+
+const toggleWorkspacePath = (path, checked) => {
+  if (checked) {
+    if (!selectedWorkspacePaths.value.includes(path)) {
+      selectedWorkspacePaths.value = [...selectedWorkspacePaths.value, path]
+    }
+    return
+  }
+  selectedWorkspacePaths.value = selectedWorkspacePaths.value.filter((item) => item !== path)
 }
 
 // OCR服务健康状态
 const ocrHealthStatus = ref({
-  onnx_rapid_ocr: { status: 'unknown', message: '' },
+  rapid_ocr: { status: 'unknown', message: '' },
   mineru_ocr: { status: 'unknown', message: '' },
   mineru_official: { status: 'unknown', message: '' },
-  paddlex_ocr: { status: 'unknown', message: '' },
-  deepseek_ocr: { status: 'unknown', message: '' }
+  pp_structure_v3_ocr: { status: 'unknown', message: '' },
+  deepseek_ocr: { status: 'unknown', message: '' },
+  paddleocr_vl_1_6: { status: 'unknown', message: '' },
+  paddleocr_pp_ocrv6: { status: 'unknown', message: '' }
 })
 
 // OCR健康检查状态
 const ocrHealthChecking = ref(false)
+const ocrPanelOpen = ref(false)
+const unavailableOcrExpanded = ref(false)
+const ocrEngineTouched = ref(false)
 
-// 分块参数
-const chunkParams = ref({
-  enable_ocr: 'disable'
+// 解析参数
+const processingParams = ref({
+  ocr_engine: DEFAULT_OCR_ENGINE,
+  ocr_engine_config: {}
 })
 
 // 自动入库相关
 const autoIndex = ref(false)
 const indexParams = ref({
-  chunk_size: 1000,
-  chunk_overlap: 200,
-  qa_separator: ''
+  chunk_preset_id: '',
+  chunk_parser_config: {}
 })
 
-// 计算属性：是否支持QA分割
-const isQaSplitSupported = computed(() => {
-  const type = kbType.value?.toLowerCase()
-  return type === 'milvus'
-})
-
-const isGraphBased = computed(() => {
-  const type = kbType.value?.toLowerCase()
-  return type === 'lightrag'
-})
+const buildAutoIndexParams = () => {
+  return buildChunkParamsPayload(indexParams.value, {
+    includeSizeOverlap: true
+  })
+}
 
 const isFolderUpload = ref(false)
 
 // 计算属性：是否启用了OCR
 const isOcrEnabled = computed(() => {
-  return chunkParams.value.enable_ocr !== 'disable'
+  return processingParams.value.ocr_engine !== 'disable'
 })
 
 // 上传模式切换相关逻辑已移除
@@ -633,124 +978,150 @@ const hasZipFiles = computed(() => {
   })
 })
 
-// 计算属性：OCR选项
-const enableOcrOptions = computed(() => [
+const ocrEngineOptions = [
   {
     value: 'disable',
     label: '不启用',
-    title: '不启用'
+    description: '不启用 OCR，仅处理文本文件'
   },
   {
-    value: 'onnx_rapid_ocr',
-    label: getRapidOcrLabel(),
-    title: 'ONNX with RapidOCR',
-    disabled:
-      ocrHealthStatus.value?.onnx_rapid_ocr?.status === 'unavailable' ||
-      ocrHealthStatus.value?.onnx_rapid_ocr?.status === 'error'
+    value: 'rapid_ocr',
+    label: 'RapidOCR (ONNX)',
+    description: 'ONNX with RapidOCR'
   },
   {
     value: 'mineru_ocr',
-    label: getMinerULabel(),
-    title: 'MinerU OCR',
-    disabled:
-      ocrHealthStatus.value?.mineru_ocr?.status === 'unavailable' ||
-      ocrHealthStatus.value?.mineru_ocr?.status === 'error'
+    label: 'MinerU OCR',
+    description: 'MinerU OCR'
   },
   {
     value: 'mineru_official',
-    label: getMinerUOfficialLabel(),
-    title: 'MinerU Official API',
-    disabled:
-      ocrHealthStatus.value?.mineru_official?.status === 'unavailable' ||
-      ocrHealthStatus.value?.mineru_official?.status === 'error'
+    label: 'MinerU Official API',
+    description: 'MinerU Official API'
   },
   {
-    value: 'paddlex_ocr',
-    label: getPaddleXLabel(),
-    title: 'PP-StructureV3',
-    disabled:
-      ocrHealthStatus.value?.paddlex_ocr?.status === 'unavailable' ||
-      ocrHealthStatus.value?.paddlex_ocr?.status === 'error'
+    value: 'pp_structure_v3_ocr',
+    label: 'PP-Structure-V3',
+    description: 'PP-Structure-V3'
   },
   {
     value: 'deepseek_ocr',
-    label: getDeepSeekOcrLabel(),
-    title: 'DeepSeek OCR (SiliconFlow)',
-    disabled:
-      ocrHealthStatus.value?.deepseek_ocr?.status === 'unavailable' ||
-      ocrHealthStatus.value?.deepseek_ocr?.status === 'error'
+    label: 'DeepSeek OCR',
+    description: 'DeepSeek OCR (SiliconFlow)'
+  },
+  {
+    value: 'paddleocr_vl_1_6',
+    label: 'PaddleOCR-VL-1.6',
+    description: 'PaddleOCR-VL-1.6 API'
+  },
+  {
+    value: 'paddleocr_pp_ocrv6',
+    label: 'PP-OCRv6',
+    description: 'PaddleOCR PP-OCRv6 API'
   }
-])
+]
 
-// 获取当前选中OCR服务的状态
-const selectedOcrStatus = computed(() => {
-  switch (chunkParams.value.enable_ocr) {
-    case 'onnx_rapid_ocr':
-      return ocrHealthStatus.value?.onnx_rapid_ocr?.status || 'unknown'
-    case 'mineru_ocr':
-      return ocrHealthStatus.value?.mineru_ocr?.status || 'unknown'
-    case 'mineru_official':
-      return ocrHealthStatus.value?.mineru_official?.status || 'unknown'
-    case 'paddlex_ocr':
-      return ocrHealthStatus.value?.paddlex_ocr?.status || 'unknown'
-    case 'deepseek_ocr':
-      return ocrHealthStatus.value?.deepseek_ocr?.status || 'unknown'
-    default:
-      return null
-  }
-})
-
-// 获取当前选中OCR服务的状态消息
-const selectedOcrMessage = computed(() => {
-  switch (chunkParams.value.enable_ocr) {
-    case 'onnx_rapid_ocr':
-      return ocrHealthStatus.value?.onnx_rapid_ocr?.message || ''
-    case 'mineru_ocr':
-      return ocrHealthStatus.value?.mineru_ocr?.message || ''
-    case 'mineru_official':
-      return ocrHealthStatus.value?.mineru_official?.message || ''
-    case 'paddlex_ocr':
-      return ocrHealthStatus.value?.paddlex_ocr?.message || ''
-    case 'deepseek_ocr':
-      return ocrHealthStatus.value?.deepseek_ocr?.message || ''
-    default:
-      return ''
-  }
-})
-
-// OCR服务状态图标映射
-const STATUS_ICONS = {
-  healthy: '✅',
-  unavailable: '❌',
-  unhealthy: '⚠️',
-  timeout: '⏰',
-  error: '⚠️',
-  unknown: '❓'
+const resolveDefaultOcrEngine = () => {
+  const configuredEngine = String(
+    configStore.config?.default_ocr_engine || DEFAULT_OCR_ENGINE
+  ).trim()
+  return ocrEngineOptions.some((option) => option.value === configuredEngine)
+    ? configuredEngine
+    : DEFAULT_OCR_ENGINE
 }
 
-// OCR选项标签生成通用函数
-const getOcrLabel = (serviceKey, displayName) => {
-  const status = ocrHealthStatus.value?.[serviceKey]?.status || 'unknown'
-  return `${STATUS_ICONS[status] || '❓'} ${displayName}`
+const applyDefaultOcrEngine = () => {
+  processingParams.value.ocr_engine = resolveDefaultOcrEngine()
 }
 
-// 兼容性包装器
-const getRapidOcrLabel = () => getOcrLabel('onnx_rapid_ocr', 'RapidOCR (ONNX)')
-const getMinerULabel = () => getOcrLabel('mineru_ocr', 'MinerU OCR')
-const getMinerUOfficialLabel = () => getOcrLabel('mineru_official', 'MinerU Official API')
-const getPaddleXLabel = () => getOcrLabel('paddlex_ocr', 'PP-StructureV3')
-const getDeepSeekOcrLabel = () => getOcrLabel('deepseek_ocr', 'DeepSeek OCR')
+watch(
+  () => configStore.config?.default_ocr_engine,
+  () => {
+    if (props.visible && !ocrEngineTouched.value) {
+      applyDefaultOcrEngine()
+    }
+  }
+)
+
+const ocrStatusLabels = {
+  local: '不启用',
+  healthy: '可用',
+  configured: '已配置',
+  unavailable: '不可用',
+  unhealthy: '异常',
+  timeout: '超时',
+  error: '异常',
+  checking: '检查中',
+  unknown: '状态未知'
+}
+
+const getOcrStatus = (engine) => {
+  if (engine === 'disable') return 'local'
+  const current = ocrHealthStatus.value?.[engine]
+  if (ocrHealthChecking.value && (!current || current.status === 'unknown')) return 'checking'
+  return current?.status || 'unknown'
+}
+
+const getOcrStatusLabel = (engine) => ocrStatusLabels[getOcrStatus(engine)] || '状态未知'
+
+const getOcrDescription = (engine) => {
+  const option = ocrEngineOptions.find((item) => item.value === engine)
+  if (engine === 'disable') return option?.description || '不启用 OCR，仅处理文本文件'
+
+  const messageText = ocrHealthStatus.value?.[engine]?.message
+  if (messageText) return messageText
+
+  const status = getOcrStatus(engine)
+  const fallbackMap = {
+    healthy: '服务正常',
+    configured: 'Token 已配置，将在解析时验证',
+    unavailable: '服务不可用',
+    unhealthy: '服务异常',
+    timeout: '服务检查超时',
+    error: '服务异常',
+    checking: '正在检查服务状态',
+    unknown: option?.description || '服务状态未知'
+  }
+  return fallbackMap[status] || option?.description || '服务状态未知'
+}
+
+const isUnavailableOcrEngine = (engine) => ['unavailable', 'error'].includes(getOcrStatus(engine))
+
+const availableOcrOptions = computed(() =>
+  ocrEngineOptions.filter((option) => !isUnavailableOcrEngine(option.value))
+)
+
+const unavailableOcrOptions = computed(() =>
+  ocrEngineOptions.filter((option) => isUnavailableOcrEngine(option.value))
+)
+
+const selectedOcrEngineLabel = computed(() => {
+  return (
+    ocrEngineOptions.find((option) => option.value === processingParams.value.ocr_engine)?.label ||
+    '选择 OCR 引擎'
+  )
+})
+
+const selectOcrEngine = (engine) => {
+  if (isUnavailableOcrEngine(engine)) return
+  ocrEngineTouched.value = true
+  processingParams.value.ocr_engine = engine
+  ocrPanelOpen.value = false
+}
+
+const toggleUnavailableOcrOptions = () => {
+  unavailableOcrExpanded.value = !unavailableOcrExpanded.value
+}
 
 // 验证OCR服务可用性
 const validateOcrService = () => {
-  if (chunkParams.value.enable_ocr === 'disable') {
+  if (!isOcrEnabled.value) {
     return true
   }
 
-  const status = selectedOcrStatus.value
-  if (status === 'unavailable' || status === 'error') {
-    const ocrMessage = selectedOcrMessage.value
-    message.error(`OCR服务不可用: ${ocrMessage}`)
+  const engine = processingParams.value.ocr_engine
+  if (isUnavailableOcrEngine(engine)) {
+    message.error(`OCR服务不可用: ${getOcrDescription(engine)}`)
     return false
   }
 
@@ -769,20 +1140,12 @@ const beforeUpload = (file) => {
   return true
 }
 
-const formatFileSize = (bytes) => {
-  if (bytes === 0 || !bytes) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`
-}
-
 const formatFileTime = (timestamp) => {
   if (!timestamp) return ''
   try {
     const date = new Date(timestamp)
     return date.toLocaleString()
-  } catch (e) {
+  } catch {
     return timestamp
   }
 }
@@ -795,7 +1158,7 @@ const showSameNameFilesInUploadArea = (files) => {
 const downloadSameNameFile = async (file) => {
   try {
     // 获取当前数据库ID
-    const currentDbId = databaseId.value
+    const currentDbId = kbId.value
     if (!currentDbId) {
       message.error('知识库ID不存在')
       return
@@ -834,7 +1197,7 @@ const deleteSameNameFile = (file) => {
     onOk: async () => {
       try {
         // 获取当前数据库ID
-        const currentDbId = databaseId.value
+        const currentDbId = kbId.value
         if (!currentDbId) {
           message.error('知识库ID不存在')
           return
@@ -858,56 +1221,161 @@ const deleteSameNameFile = (file) => {
 }
 
 const customRequest = async (options) => {
-  const { file, onProgress, onSuccess, onError } = options
-
-  const formData = new FormData()
-  // 如果是文件夹上传，使用相对路径作为文件名
-  const filename =
-    isFolderUpload.value && file.webkitRelativePath ? file.webkitRelativePath : file.name
-  formData.append('file', file, filename)
-
-  const dbId = databaseId.value
-  if (!dbId) {
-    onError(new Error('Database ID is missing'))
-    return
+  const fileUid = options.file?.uid
+  if (fileUid) {
+    uploadTaskStatus.value[fileUid] = 'queued'
+    uploadTaskProgress.value[fileUid] = 0
   }
 
-  const xhr = new XMLHttpRequest()
-  xhr.open('POST', `/api/knowledge/files/upload?db_id=${dbId}`)
-
-  const headers = getAuthHeaders()
-  for (const [key, value] of Object.entries(headers)) {
-    xhr.setRequestHeader(key, value)
+  const task = {
+    options,
+    xhr: null,
+    canceled: false
   }
 
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      onProgress({ percent: (e.loaded / e.total) * 100 })
+  uploadQueue.value.push(task)
+  processUploadQueue()
+
+  return {
+    abort: () => {
+      task.canceled = true
+      if (task.xhr) {
+        task.xhr.abort()
+      }
+      const queueIndex = uploadQueue.value.indexOf(task)
+      if (queueIndex !== -1) {
+        uploadQueue.value.splice(queueIndex, 1)
+      }
+      if (fileUid) {
+        uploadTaskStatus.value[fileUid] = 'error'
+      }
     }
   }
+}
 
-  xhr.onload = () => {
-    if (xhr.status >= 200 && xhr.status < 300) {
-      try {
-        const response = JSON.parse(xhr.responseText)
-        onSuccess(response, xhr)
-      } catch (e) {
-        onError(e)
+const processUploadQueue = () => {
+  while (activeUploadCount.value < MAX_UPLOAD_CONCURRENCY && uploadQueue.value.length > 0) {
+    const task = uploadQueue.value.shift()
+    if (!task || task.canceled) {
+      continue
+    }
+
+    activeUploadCount.value += 1
+    runUploadTask(task)
+      .catch(() => {
+        // 错误已经在 runUploadTask 内处理，这里只保证队列继续消费
+      })
+      .finally(() => {
+        activeUploadCount.value -= 1
+        processUploadQueue()
+      })
+  }
+}
+
+const runUploadTask = (task) => {
+  const { file, onProgress, onSuccess, onError } = task.options
+  const fileUid = file?.uid
+
+  if (fileUid) {
+    uploadTaskStatus.value[fileUid] = 'uploading'
+  }
+
+  return new Promise((resolve, reject) => {
+    const formData = new FormData()
+    const filename =
+      isFolderUpload.value && file.webkitRelativePath ? file.webkitRelativePath : file.name
+    formData.append('file', file, filename)
+
+    const currentKbId = kbId.value
+    if (!currentKbId) {
+      const error = new Error('Database ID is missing')
+      if (fileUid) {
+        uploadTaskStatus.value[fileUid] = 'error'
       }
-    } else {
-      const errorResp = JSON.parse(xhr.responseText)
-      // 设置 file.response 让 handleFileUpload 能读取到错误信息
+      onError(error)
+      reject(error)
+      return
+    }
+
+    const xhr = new XMLHttpRequest()
+    task.xhr = xhr
+    xhr.open('POST', `/api/knowledge/files/upload?kb_id=${currentKbId}`)
+
+    const headers = getAuthHeaders()
+    for (const [key, value] of Object.entries(headers)) {
+      xhr.setRequestHeader(key, value)
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) {
+        return
+      }
+      const percent = Math.min(100, (event.loaded / event.total) * 100)
+      if (fileUid) {
+        uploadTaskProgress.value[fileUid] = percent
+      }
+      onProgress({ percent })
+    }
+
+    xhr.onload = () => {
+      if (task.canceled) {
+        resolve()
+        return
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText)
+          if (fileUid) {
+            uploadTaskStatus.value[fileUid] = 'done'
+            uploadTaskProgress.value[fileUid] = 100
+          }
+          onSuccess(response, xhr)
+          resolve()
+        } catch (error) {
+          if (fileUid) {
+            uploadTaskStatus.value[fileUid] = 'error'
+          }
+          onError(error)
+          reject(error)
+        }
+        return
+      }
+
+      let errorResp
+      try {
+        errorResp = JSON.parse(xhr.responseText || '{}')
+      } catch {
+        errorResp = {}
+      }
       file.response = errorResp
       const error = new Error(errorResp.detail || 'Upload failed')
+      if (fileUid) {
+        uploadTaskStatus.value[fileUid] = 'error'
+      }
       onError(error, file)
+      reject(error)
     }
-  }
 
-  xhr.onerror = (e) => {
-    onError(e)
-  }
+    xhr.onerror = (errorEvent) => {
+      if (fileUid) {
+        uploadTaskStatus.value[fileUid] = 'error'
+      }
+      onError(errorEvent)
+      reject(errorEvent)
+    }
 
-  xhr.send(formData)
+    xhr.onabort = () => {
+      if (fileUid) {
+        uploadTaskStatus.value[fileUid] = 'error'
+      }
+      const abortError = new Error('Upload aborted')
+      onError(abortError)
+      reject(abortError)
+    }
+
+    xhr.send(formData)
+  })
 }
 
 const handleFileUpload = (info) => {
@@ -952,6 +1420,13 @@ const checkOcrHealth = async () => {
   }
 }
 
+const handleOcrPanelOpenChange = (open) => {
+  ocrPanelOpen.value = open
+  if (open) {
+    checkOcrHealth()
+  }
+}
+
 const getAuthHeaders = () => {
   const userStore = useUserStore()
   return userStore.getAuthHeaders()
@@ -959,20 +1434,82 @@ const getAuthHeaders = () => {
 
 const openDocLink = () => {
   window.open(
-    'https://xerrors.github.io/Yuxi-Know/latest/advanced/document-processing.html',
+    'https://xerrors.github.io/Yuxi/advanced/document-processing.html',
     '_blank',
     'noopener'
   )
 }
 
 const chunkData = async () => {
-  if (!databaseId.value) {
+  if (!kbId.value) {
     message.error('请先选择知识库')
     return
   }
 
   // 验证OCR服务可用性（非 URL 模式下）
   if (uploadMode.value !== 'url' && !validateOcrService()) {
+    return
+  }
+
+  if (uploadMode.value === 'workspace') {
+    if (selectedWorkspacePaths.value.length === 0) {
+      message.error('请先选择工作区文件')
+      return
+    }
+
+    try {
+      store.state.chunkLoading = true
+      const res = await fileApi.importWorkspaceFiles(kbId.value, selectedWorkspacePaths.value)
+      const importedItems = Array.isArray(res?.items) ? res.items : []
+      if (importedItems.length === 0) {
+        message.error('工作区文件导入失败')
+        return
+      }
+
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif']
+      const items = []
+      const content_hashes = {}
+      const file_sizes = {}
+      for (const item of importedItems) {
+        const filePath = item.file_path
+        if (!filePath) continue
+        items.push(filePath)
+        if (item.content_hash) content_hashes[filePath] = item.content_hash
+        if (Number.isFinite(item.size)) file_sizes[filePath] = item.size
+        mergeSameNameFiles(item.same_name_files)
+
+        const ext = filePath.substring(filePath.lastIndexOf('.')).toLowerCase()
+        if (imageExtensions.includes(ext) && !isOcrEnabled.value) {
+          message.error({
+            content: '检测到图片文件，必须启用 OCR 才能提取文本内容。',
+            duration: 5
+          })
+          return
+        }
+      }
+
+      const params = { ...processingParams.value, content_hashes, file_sizes }
+      if (autoIndex.value) {
+        params.auto_index = true
+        Object.assign(params, buildAutoIndexParams())
+      }
+
+      await store.addFiles({
+        items,
+        contentType: 'file',
+        params,
+        parentId: selectedFolderId.value
+      })
+
+      emit('success')
+      handleCancel()
+      selectedWorkspacePaths.value = []
+    } catch (error) {
+      console.error('工作区文件导入失败:', error)
+      message.error('工作区文件导入失败: ' + (error.message || '未知错误'))
+    } finally {
+      store.state.chunkLoading = false
+    }
     return
   }
 
@@ -985,18 +1522,41 @@ const chunkData = async () => {
       return
     }
 
+    // 批内按内容哈希去重，避免同一批次重复入库
+    const deduplicatedItems = []
+    const seenKeys = new Set()
+    let skippedDuplicates = 0
+    for (const item of successfulItems) {
+      const dedupKey = item.data?.content_hash || item.data?.file_path || item.url
+      if (seenKeys.has(dedupKey)) {
+        skippedDuplicates += 1
+        continue
+      }
+      seenKeys.add(dedupKey)
+      deduplicatedItems.push(item)
+    }
+
+    if (deduplicatedItems.length === 0) {
+      message.error('URL 内容均为重复项，请更换后重试')
+      return
+    }
+
+    if (skippedDuplicates > 0) {
+      message.warning(`检测到 ${skippedDuplicates} 个重复 URL 内容，已保留首个并跳过其余项`)
+    }
+
     try {
       store.state.chunkLoading = true
-      const params = { ...chunkParams.value }
+      const params = { ...processingParams.value }
       if (autoIndex.value) {
         params.auto_index = true
-        Object.assign(params, indexParams.value)
+        Object.assign(params, buildAutoIndexParams())
       }
 
       // 构造 _preprocessed_map 和 items (minio urls)
       const items = []
       const preprocessedMap = {}
-      for (const item of successfulItems) {
+      for (const item of deduplicatedItems) {
         // item.data = { file_path: "http://minio...", content_hash: "...", filename: "...", ... }
         // 注意：fetch-url 返回的 file_path 其实是 MinIO URL
         // 我们需要传递 MinIO URL 给 addDocuments
@@ -1038,6 +1598,7 @@ const chunkData = async () => {
   // 提取已上传的文件信息
   const items = []
   const content_hashes = {}
+  const file_sizes = {}
   for (const file of fileList.value) {
     if (file.status !== 'done') continue
     const file_path = file.response?.file_path
@@ -1046,10 +1607,11 @@ const chunkData = async () => {
 
     items.push(file_path)
     if (content_hash) content_hashes[file_path] = content_hash
+    if (Number.isFinite(file.response?.size)) file_sizes[file_path] = file.response.size
 
     // 检查是否需要OCR
     const ext = file_path.substring(file_path.lastIndexOf('.')).toLowerCase()
-    if (imageExtensions.includes(ext) && chunkParams.value.enable_ocr === 'disable') {
+    if (imageExtensions.includes(ext) && !isOcrEnabled.value) {
       message.error({
         content: '检测到图片文件，必须启用 OCR 才能提取文本内容。',
         duration: 5
@@ -1065,10 +1627,10 @@ const chunkData = async () => {
 
   try {
     store.state.chunkLoading = true
-    const params = { ...chunkParams.value, content_hashes }
+    const params = { ...processingParams.value, content_hashes, file_sizes }
     if (autoIndex.value) {
       params.auto_index = true
-      Object.assign(params, indexParams.value)
+      Object.assign(params, buildAutoIndexParams())
     }
 
     await store.addFiles({
@@ -1236,6 +1798,150 @@ const chunkData = async () => {
   white-space: nowrap;
 }
 
+.ocr-engine-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+}
+
+.ocr-engine-trigger-main {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 8px;
+}
+
+.ocr-engine-trigger-loading {
+  flex: 0 0 auto;
+  color: var(--main-color);
+  animation: spin 1s linear infinite;
+}
+
+.ocr-engine-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ocr-engine-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 280px;
+}
+
+.ocr-engine-option {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--gray-100);
+  border-radius: 8px;
+  background: var(--gray-0);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.ocr-engine-option:hover:not(:disabled) {
+  border-color: var(--main-color);
+  background: color-mix(in srgb, var(--main-color) 6%, var(--gray-0));
+}
+
+.ocr-engine-option.selected {
+  border-color: var(--main-color);
+  background: color-mix(in srgb, var(--main-color) 8%, var(--gray-0));
+}
+
+.ocr-engine-option.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.unavailable-ocr-options,
+.unavailable-ocr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.unavailable-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 4px 2px;
+  border: none;
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.unavailable-toggle:hover {
+  color: var(--gray-800);
+}
+
+.ocr-engine-option-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ocr-engine-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--gray-900);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.ocr-engine-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  flex: none;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.ocr-engine-status.status-local,
+.ocr-engine-status.status-healthy,
+.ocr-engine-status.status-configured {
+  color: var(--color-success-700);
+}
+
+.ocr-engine-status.status-unavailable,
+.ocr-engine-status.status-error {
+  color: var(--color-error-700);
+}
+
+.ocr-engine-status.status-unhealthy,
+.ocr-engine-status.status-timeout,
+.ocr-engine-status.status-unknown,
+.ocr-engine-status.status-checking {
+  color: var(--color-warning-700);
+}
+
+.ocr-engine-desc {
+  color: var(--gray-500);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+:global(.ocr-engine-popover .ant-popover-inner-content) {
+  padding: 10px;
+}
+
 .param-description {
   font-size: 12px;
   color: var(--gray-400);
@@ -1376,6 +2082,253 @@ const chunkData = async () => {
   display: inline-block;
   padding: 2px 8px;
   border-radius: 4px;
+}
+
+.upload-progress-card {
+  margin-top: 8px;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: var(--gray-50);
+  padding: 8px;
+}
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.progress-header-left {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+
+.progress-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.progress-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gray-700);
+  white-space: nowrap;
+}
+
+.progress-percent {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--main-600);
+}
+
+.progress-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  &.inline-in-header {
+    gap: 6px;
+  }
+}
+
+.stat-pill {
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  border: 1px solid var(--gray-300);
+  background: var(--gray-100);
+  color: var(--gray-600);
+
+  &.uploading {
+    background: var(--main-50);
+    border-color: var(--main-200);
+    color: var(--main-600);
+  }
+
+  &.queued {
+    background: var(--gray-100);
+    border-color: var(--gray-300);
+    color: var(--gray-600);
+  }
+
+  &.success {
+    background: var(--color-success-50);
+    border-color: var(--color-success-200);
+    color: var(--color-success-600);
+  }
+
+  &.error {
+    background: var(--color-error-50);
+    border-color: var(--color-error-200);
+    color: var(--color-error-600);
+  }
+}
+
+.progress-tip {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--gray-500);
+}
+
+.progress-details {
+  border-top: 1px dashed var(--gray-200);
+  padding-top: 6px;
+}
+
+.details-list {
+  max-height: 160px;
+  overflow-y: auto;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  background: var(--gray-0);
+}
+
+.detail-row {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--gray-100);
+
+  &:last-child {
+    border-bottom: none;
+  }
+}
+
+.detail-name {
+  font-size: 11px;
+  color: var(--gray-700);
+  font-weight: 500;
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.detail-error {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--color-error-600);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toggle-progress-btn {
+  color: var(--gray-500);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline: 4px;
+
+  &:hover {
+    color: var(--main-600);
+    background: var(--gray-100);
+  }
+}
+
+/* Workspace Area */
+.workspace-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.workspace-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.workspace-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--gray-700);
+  min-width: 0;
+}
+
+.workspace-current-path {
+  max-width: 360px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.workspace-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.workspace-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--gray-0);
+}
+
+.workspace-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--gray-50);
+  }
+
+  &.disabled {
+    cursor: not-allowed;
+    color: var(--gray-400);
+  }
+}
+
+.workspace-directory {
+  color: var(--gray-800);
+}
+
+.workspace-file-icon {
+  flex-shrink: 0;
+  color: var(--main-500);
+}
+
+.workspace-file-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--gray-700);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-file-size {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--gray-500);
 }
 
 /* URL Area */
@@ -1604,18 +2557,29 @@ const chunkData = async () => {
   border-radius: 6px;
 }
 
-.lightrag-tip {
-  display: flex;
-  align-items: center;
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: var(--main-50);
-  border-radius: 6px;
-  font-size: 13px;
-  color: var(--gray-600);
-}
-
 .setting-label .ant-checkbox {
   margin-right: 8px;
+}
+
+@media (max-width: 768px) {
+  .top-action-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .auto-index-toggle {
+    padding-right: 0;
+  }
+
+  .progress-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .progress-header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 </style>

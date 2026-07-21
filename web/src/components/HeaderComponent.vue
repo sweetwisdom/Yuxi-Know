@@ -23,7 +23,7 @@
 
 <script setup>
 import { LoadingOutlined } from '@ant-design/icons-vue'
-const props = defineProps({
+defineProps({
   title: {
     type: String,
     required: true
@@ -43,8 +43,8 @@ const props = defineProps({
 .header-container {
   background-color: var(--bg-sider);
   backdrop-filter: blur(10px);
-  padding: 10px 24px;
-  border-bottom: 1px solid var(--gray-150);
+  padding: 8px var(--page-padding);
+  height: 50px;
   position: sticky;
   top: 0;
   z-index: 1000;
@@ -52,6 +52,8 @@ const props = defineProps({
 
 .header-content {
   display: flex;
+  width: 100%;
+  height: 100%;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
@@ -61,7 +63,7 @@ const props = defineProps({
   flex: 1;
   width: 100%;
   font-size: 14px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--gray-900);
 
   .header-title-block {
     display: flex;
@@ -71,13 +73,13 @@ const props = defineProps({
 
   h1 {
     margin: 0;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 500;
     color: var(--gray-2000);
   }
 
   p {
-    margin: 8px 0 0;
+    margin: 4px 0 0;
   }
 }
 

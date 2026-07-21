@@ -1,263 +1,154 @@
 <template>
   <div class="agent-panel" :class="{ resizing: isResizing }">
-    <!-- 拖拽手柄 -->
-    <div class="resize-handle" @mousedown="startResize"></div>
-    <div class="panel-header">
+    <div class="resize-handle" @pointerdown="startResize"></div>
+    <div class="panel-header side-panel__header">
       <div class="panel-title">
-        <FolderCode :size="18" class="header-icon" />
-        <span><strong>状态工作台</strong></span>
+        <div v-if="hasActivePreview && normalizedPreviewTabs.length" class="preview-tabs-bar">
+          <div
+            v-for="tab in normalizedPreviewTabs"
+            :key="tab.path"
+            class="preview-tab"
+            :class="{ active: tab.path === activePreviewPath }"
+          >
+            <button
+              type="button"
+              class="preview-tab-main"
+              :title="tab.path"
+              @click="activatePreviewTab(tab.path)"
+            >
+              <FileTypeIcon :name="tab.path" :size="16" class="preview-tab-icon" />
+              <span class="preview-tab-name">{{ tab.name }}</span>
+            </button>
+            <button
+              type="button"
+              class="preview-tab-close"
+              title="关闭预览"
+              aria-label="关闭预览"
+              @click.stop="closePreviewTab(tab.path)"
+            >
+              <X :size="13" />
+            </button>
+          </div>
+        </div>
+        <span v-else><strong>文件</strong></span>
       </div>
-      <div class="header-actions">
-        <a-button type="text" class="refresh-btn" @click="emitRefresh">
-          <!-- <template #icon><RefreshCw :size="14" /></template> -->
-          刷新
-        </a-button>
-        <button class="close-btn" @click="$emit('close')">
-          <X :size="18" />
+      <div class="window-actions">
+        <button
+          v-if="hasActivePreview"
+          class="header-action-btn"
+          :class="{ active: treePaneVisible }"
+          :title="treePaneVisible ? '隐藏文件列表' : '查看文件列表'"
+          :aria-label="treePaneVisible ? '隐藏文件列表' : '查看文件列表'"
+          @click="toggleFileTree"
+        >
+          <Folders :size="15" />
+        </button>
+        <button class="header-action-btn" title="刷新" aria-label="刷新" @click="emitRefresh">
+          <RefreshCw :size="15" />
+        </button>
+        <button
+          class="header-action-btn"
+          title="关闭文件面板"
+          aria-label="关闭文件面板"
+          @click="emitClose"
+        >
+          <PanelRightClose :size="15" />
         </button>
       </div>
     </div>
 
-    <div class="tabs">
-      <button class="tab" :class="{ active: activeTab === 'todos' }" @click="activeTab = 'todos'">
-        任务 ({{ completedCount }}/{{ todos.length }})
-      </button>
-      <button class="tab" :class="{ active: activeTab === 'files' }" @click="activeTab = 'files'">
-        文件 ({{ fileCount }})
-      </button>
-      <button
-        class="tab"
-        :class="{ active: activeTab === 'attachments' }"
-        @click="activeTab = 'attachments'"
-      >
-        附件 ({{ attachmentCount }})
-      </button>
-    </div>
     <div class="tab-content">
-      <!-- Todo Display -->
-      <div v-if="activeTab === 'todos'" class="todo-display">
-        <div v-if="!todos.length" class="empty">暂无任务</div>
-        <div v-else class="todo-list" ref="todoListRef">
-          <div v-for="(todo, index) in todos" :key="index" class="todo-item">
-            <div class="todo-status">
-              <CheckCircleOutlined v-if="todo.status === 'completed'" class="icon completed" />
-              <SyncOutlined
-                v-else-if="todo.status === 'in_progress'"
-                class="icon in-progress"
-                spin
-              />
-              <ClockCircleOutlined v-else-if="todo.status === 'pending'" class="icon pending" />
-              <CloseCircleOutlined v-else-if="todo.status === 'cancelled'" class="icon cancelled" />
-              <QuestionCircleOutlined v-else class="icon unknown" />
-            </div>
-            <a-tooltip v-if="overflowedIds.has(index)" placement="topLeft" :title="todo.content">
-              <span class="todo-text">{{ todo.content }}</span>
-            </a-tooltip>
-            <span v-else class="todo-text">{{ todo.content }}</span>
+      <div
+        class="files-display"
+        :class="{ 'has-preview': hasActivePreview, 'with-tree': treePaneVisible }"
+      >
+        <div v-if="hasActivePreview" class="preview-pane">
+          <AgentFilePreview
+            v-if="currentFile"
+            containerClass="side-preview-shell"
+            contentClass="side-file-content"
+            :file="currentFile"
+            :filePath="currentFilePath"
+            :fullHeight="true"
+            :showFileIcon="false"
+            :borderless="true"
+            :showClose="false"
+            :showDownload="true"
+            :showFullscreen="true"
+            @download="downloadFile"
+          />
+          <div v-else class="preview-empty">
+            <div class="preview-empty-title">选择交付物后可在此预览</div>
+            <div class="preview-empty-desc">也可以打开文件列表，浏览当前工作区文件。</div>
           </div>
         </div>
-      </div>
 
-      <!-- Files Display -->
-      <div v-if="activeTab === 'files'" class="files-display">
-        <div v-if="!fileCount" class="empty">暂无文件</div>
-        <div v-else class="file-tree-container">
-          <a-tree
-            v-model:expandedKeys="expandedKeys"
-            :tree-data="fileTreeData"
-            :show-icon="true"
-            block-node
-            :show-line="false"
-            @select="onFileSelect"
-          >
-            <template #icon="{ data, expanded }">
-              <template v-if="data.isLeaf">
-                <component
-                  :is="getFileIcon(data.key)"
-                  :style="{ color: getFileIconColor(data.key), fontSize: '16px' }"
-                />
-              </template>
-              <template v-else>
-                <FolderOpen v-if="expanded" :size="18" class="folder-icon open" />
-                <Folder v-else :size="18" class="folder-icon" />
-              </template>
-            </template>
-            <template #title="{ data }">
-              <div class="tree-node-wrapper" @click="toggleFolder(data)">
-                <div class="tree-node-name" :title="data.title">
-                  <span class="name-start">{{ data.nameStart || data.title }}</span>
-                  <span class="name-end" v-if="data.nameEnd">{{ data.nameEnd }}</span>
-                </div>
-                <div v-if="data.isLeaf" class="node-actions" @click.stop>
-                  <button
-                    class="tree-action-btn tree-download-btn"
-                    @click.stop="downloadFile(data.fileData)"
-                    title="下载文件"
-                  >
-                    <Download :size="14" />
-                  </button>
-                </div>
-              </div>
-            </template>
-          </a-tree>
-        </div>
-      </div>
-
-      <!-- Attachments Display -->
-      <div v-if="activeTab === 'attachments'" class="files-display">
-        <div class="list-header" v-if="attachmentCount">
-          <div class="list-header-left">
-            <span class="count">{{ attachmentCount }} 个附件</span>
-            <a-tooltip title="支持 txt/md/docx/html 格式 ≤ 5 MB">
-              <Info :size="14" class="info-icon" />
-            </a-tooltip>
+        <div v-if="treePaneVisible" class="tree-pane">
+          <div v-if="!threadId" class="empty">创建对话后可查看工作区</div>
+          <div v-else-if="loadingFiles" class="empty">正在加载文件系统...</div>
+          <div v-else-if="filesystemError" class="empty error-state">
+            <div>{{ filesystemError }}</div>
+            <a-button type="link" size="small" @click="refreshFileSystem">重试</a-button>
           </div>
-          <button class="add-btn" @click="triggerUpload" :disabled="isUploading">
-            <Plus :size="16" />
-            <span>添加</span>
-          </button>
-        </div>
-        <div v-if="!attachmentCount" class="empty">
-          <p>暂无附件，支持 txt/md/docx/html 格式 ≤ 5 MB</p>
-          <a-button type="primary" @click="triggerUpload" :loading="isUploading">上传附件</a-button>
-        </div>
-        <div v-else class="file-tree-container attachment-tree">
-          <a-tree
-            v-model:expandedKeys="expandedKeys"
-            :tree-data="attachmentTreeData"
-            :show-icon="true"
-            block-node
-            :show-line="false"
-            @select="onFileSelect"
-          >
-            <template #icon="{ data, expanded }">
-              <template v-if="data.isLeaf">
-                <component
-                  :is="getFileIcon(data.key)"
-                  :style="{ color: getFileIconColor(data.key), fontSize: '16px' }"
-                />
-              </template>
-              <template v-else>
-                <FolderOpen v-if="expanded" :size="18" class="folder-icon open" />
-                <Folder v-else :size="18" class="folder-icon" />
-              </template>
-            </template>
-            <template #title="{ data }">
-              <div class="tree-node-wrapper" @click="toggleFolder(data)">
-                <div class="tree-node-name" :title="data.title">
-                  <span class="name-start">{{ data.nameStart || data.title }}</span>
-                  <span class="name-end" v-if="data.nameEnd">{{ data.nameEnd }}</span>
+          <div v-else-if="!fileTreeData.length" class="empty">当前工作区为空</div>
+          <div v-else class="file-tree-container">
+            <FileTreeComponent
+              v-model:selectedKeys="selectedKeys"
+              v-model:expandedKeys="expandedKeys"
+              :tree-data="fileTreeData"
+              :load-data="loadData"
+              @select="onFileSelect"
+            >
+              <template #title="{ node }">
+                <div class="tree-node-name" :title="node.title">
+                  <span class="name-start">{{ node.nameStart || node.title }}</span>
+                  <span class="name-end" v-if="node.nameEnd">{{ node.nameEnd }}</span>
                 </div>
-                <div v-if="data.isLeaf" class="node-actions" @click.stop>
+              </template>
+              <template #actions="{ node }">
+                <div class="node-actions-container">
                   <button
+                    v-if="node.isLeaf"
                     class="tree-action-btn tree-download-btn"
-                    @click.stop="downloadFile(data.fileData)"
+                    @click.stop="downloadFile(node.fileData)"
                     title="下载文件"
+                    aria-label="下载文件"
                   >
                     <Download :size="14" />
                   </button>
                   <button
                     class="tree-action-btn tree-delete-btn"
-                    @click.stop="deleteAttachment(data.fileData)"
-                    title="删除附件"
+                    :disabled="deletingPaths.has(node.key)"
+                    @click.stop="confirmDeleteNode(node)"
+                    :title="node.isLeaf ? '删除文件' : '删除文件夹'"
+                    :aria-label="node.isLeaf ? '删除文件' : '删除文件夹'"
                   >
                     <Trash2 :size="14" />
                   </button>
                 </div>
-              </div>
-            </template>
-          </a-tree>
+              </template>
+            </FileTreeComponent>
+          </div>
         </div>
       </div>
     </div>
-
-    <!-- Hidden File Input -->
-    <input
-      type="file"
-      ref="fileInputRef"
-      style="display: none"
-      multiple
-      @change="handleFileChange"
-    />
-
-    <!-- 文件内容 Modal -->
-    <a-modal
-      v-model:open="modalVisible"
-      width="80%"
-      :footer="null"
-      :closable="false"
-      @cancel="closeModal"
-    >
-      <template #title>
-        <div class="modal-header-title">
-          <div class="file-title">
-            <component
-              :is="getFileIcon(currentFilePath)"
-              :style="{ color: getFileIconColor(currentFilePath), fontSize: '18px' }"
-            />
-            <span class="file-path-title">{{ currentFilePath }}</span>
-          </div>
-          <div class="modal-actions">
-            <button
-              class="modal-action-btn"
-              @click="downloadFile(currentFile)"
-              v-if="currentFile"
-              title="下载"
-            >
-              <Download :size="18" />
-            </button>
-            <button class="modal-action-btn" @click="closeModal" title="关闭">
-              <X :size="18" />
-            </button>
-          </div>
-        </div>
-      </template>
-      <div class="file-content">
-        <template v-if="isMarkdown">
-          <MdPreview
-            :modelValue="formatContent(currentFile?.content)"
-            :theme="theme"
-            previewTheme="github"
-          />
-        </template>
-        <template v-else>
-          <pre v-if="Array.isArray(currentFile?.content)">{{
-            formatContent(currentFile.content)
-          }}</pre>
-          <div v-else-if="typeof currentFile?.content === 'string'">{{ currentFile.content }}</div>
-          <pre v-else>{{ JSON.stringify(currentFile, null, 2) }}</pre>
-        </template>
-      </div>
-    </a-modal>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onUpdated, nextTick } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { Download, Folders, PanelRightClose, RefreshCw, Trash2, X } from 'lucide-vue-next'
+import { Modal, message } from 'ant-design-vue'
+import FileTreeComponent from '@/components/FileTreeComponent.vue'
+import AgentFilePreview from '@/components/AgentFilePreview.vue'
+import FileTypeIcon from '@/components/common/FileTypeIcon.vue'
 import {
-  Download,
-  X,
-  Plus,
-  Info,
-  FolderCode,
-  RefreshCw,
-  Folder,
-  FolderOpen,
-  Trash2
-} from 'lucide-vue-next'
-import {
-  CheckCircleOutlined,
-  SyncOutlined,
-  ClockCircleOutlined,
-  CloseCircleOutlined,
-  QuestionCircleOutlined
-} from '@ant-design/icons-vue'
-import { MdPreview } from 'md-editor-v3'
-import 'md-editor-v3/lib/preview.css'
-import { useThemeStore } from '@/stores/theme'
-import { getFileIcon, getFileIconColor, formatFileSize } from '@/utils/file_utils'
-import { threadApi } from '@/apis'
-import { message } from 'ant-design-vue'
+  deleteViewerFile,
+  downloadViewerFile,
+  getViewerFileContent,
+  getViewerFileSystemTree
+} from '@/apis/viewer_filesystem'
+import { normalizePreviewResponse } from '@/utils/file_preview'
 
 const props = defineProps({
   agentState: {
@@ -271,380 +162,484 @@ const props = defineProps({
   panelRatio: {
     type: Number,
     default: 0.35
+  },
+  previewTabs: {
+    type: Array,
+    default: () => []
+  },
+  activePreviewPath: {
+    type: String,
+    default: ''
+  },
+  viewMode: {
+    type: String,
+    default: 'tree',
+    validator: (value) => ['tree', 'preview'].includes(value)
   }
 })
 
-const emit = defineEmits(['refresh', 'close', 'resize', 'resizing'])
+const emit = defineEmits([
+  'close',
+  'refresh',
+  'resize',
+  'resizing',
+  'open-preview',
+  'activate-preview',
+  'close-preview-tab',
+  'close-preview-path',
+  'view-mode-change'
+])
+const DISPLAY_ROOT_DIRECTORY_NAME = 'user-data'
 
-const activeTab = ref('todos')
-const modalVisible = ref(false)
 const currentFile = ref(null)
 const currentFilePath = ref('')
-const isUploading = ref(false)
-const fileInputRef = ref(null)
+const loadingFiles = ref(false)
+const filesystemError = ref('')
 
-const themeStore = useThemeStore()
-const theme = computed(() => (themeStore.isDark ? 'dark' : 'light'))
-
-const isMarkdown = computed(() => {
-  return currentFilePath.value?.toLowerCase().endsWith('.md')
-})
-
-const todos = computed(() => {
-  return props.agentState?.todos || []
-})
-
-const files = computed(() => {
-  return props.agentState?.files || []
-})
-
-const attachments = computed(() => {
-  return props.agentState?.attachments || []
-})
-
-const completedCount = computed(() => {
-  return todos.value.filter((t) => t.status === 'completed').length
-})
-
-// 溢出检测
-const overflowedIds = ref(new Set())
-const todoListRef = ref(null)
-
-const checkOverflow = () => {
-  if (!todoListRef.value) return
-
-  const newOverflowed = new Set()
-  const textElements = todoListRef.value.querySelectorAll('.todo-text')
-  textElements.forEach((el, index) => {
-    if (el.scrollWidth > el.clientWidth) {
-      newOverflowed.add(index)
-    }
-  })
-
-  // 简单的 Set 相等性检查，防止无限循环
-  if (overflowedIds.value.size === newOverflowed.size) {
-    let isSame = true
-    for (const val of newOverflowed) {
-      if (!overflowedIds.value.has(val)) {
-        isSame = false
-        break
-      }
-    }
-    if (isSame) return
-  }
-
-  overflowedIds.value = newOverflowed
-}
-
-onMounted(() => {
-  nextTick(checkOverflow)
-})
-
-onUpdated(() => {
-  nextTick(checkOverflow)
-})
-
-// 适配实际数据格式
-const normalizedFiles = computed(() => {
-  if (!Array.isArray(files.value)) return []
-
-  const result = []
-  files.value.forEach((item) => {
-    if (typeof item === 'object' && item !== null) {
-      Object.entries(item).forEach(([filePath, fileData]) => {
-        result.push({
-          path: filePath,
-          ...fileData
-        })
-      })
-    }
-  })
-
-  return result
-})
-
-const normalizedAttachments = computed(() => {
-  if (!Array.isArray(attachments.value)) return []
-  return attachments.value.map((item) => ({
-    ...item,
-    path: item.file_name,
-    content: item.markdown,
-    modified_at: item.uploaded_at,
-    size: item.file_size
-  }))
-})
-
+const dynamicTreeData = ref([])
+const selectedKeys = ref([])
 const expandedKeys = ref([])
+const deletingPaths = ref(new Set())
+const isResizing = ref(false)
 
-const buildTreeData = (filesList) => {
-  if (!filesList.length) return []
+const normalizedPreviewTabs = computed(() =>
+  (props.previewTabs || [])
+    .filter((file) => file?.path)
+    .map((file) => ({
+      ...file,
+      path: String(file.path),
+      name: file.name || getFileName(file)
+    }))
+)
+const hasActivePreview = computed(() => Boolean(props.activePreviewPath))
+const treePaneVisible = computed(() => !hasActivePreview.value || props.viewMode === 'tree')
+const activePreviewTab = computed(
+  () => normalizedPreviewTabs.value.find((file) => file.path === props.activePreviewPath) || null
+)
+const fileTreeData = computed(() => dynamicTreeData.value)
 
-  const root = []
+const buildDisplayName = (fullPath) => {
+  const normalized = String(fullPath || '').replace(/\/+$/, '')
+  if (!normalized || normalized === '/') return '/'
+  const parts = normalized.split('/').filter(Boolean)
+  return parts[parts.length - 1] || normalized
+}
 
-  // Helper to find or create folder node
-  const findOrCreateFolder = (nodes, key, title) => {
-    let node = nodes.find((n) => n.key === key)
-    if (!node) {
-      node = {
-        key,
-        title,
-        isLeaf: false,
-        children: [],
-        class: 'folder-node'
-      }
-      nodes.push(node)
+const sortEntries = (entries) => {
+  return [...entries].sort((left, right) => {
+    const leftIsDir = Boolean(left?.is_dir)
+    const rightIsDir = Boolean(right?.is_dir)
+    if (leftIsDir !== rightIsDir) {
+      return leftIsDir ? -1 : 1
     }
-    return node
-  }
 
-  filesList.forEach((file) => {
-    const cleanPath = file.path.startsWith('/') ? file.path.slice(1) : file.path
-    const parts = cleanPath.split('/')
-    let currentLevel = root
-    let currentPath = ''
-
-    parts.forEach((part, index) => {
-      const isLast = index === parts.length - 1
-      currentPath = currentPath ? `${currentPath}/${part}` : part
-
-      if (isLast) {
-        const nameParts = part.split('.')
-        let nameStart = part
-        let nameEnd = ''
-
-        if (nameParts.length > 1) {
-          // If extension exists
-          const ext = nameParts.pop()
-          // Keep last 5 chars if possible, or just the extension
-          // User asked for "last 5 chars".
-          // If we treat the whole thing as a string:
-          if (part.length > 5) {
-            nameEnd = part.slice(-5)
-            nameStart = part.slice(0, -5)
-          } else {
-            nameStart = part
-            nameEnd = ''
-          }
-        } else {
-          if (part.length > 5) {
-            nameEnd = part.slice(-5)
-            nameStart = part.slice(0, -5)
-          }
-        }
-
-        currentLevel.push({
-          key: currentPath,
-          title: part,
-          nameStart,
-          nameEnd,
-          isLeaf: true,
-          fileData: file,
-          class: 'file-node'
-        })
-      } else {
-        const folderNode = findOrCreateFolder(currentLevel, currentPath, part)
-        currentLevel = folderNode.children
-      }
-    })
+    const leftName = buildDisplayName(left?.path).toLowerCase()
+    const rightName = buildDisplayName(right?.path).toLowerCase()
+    return leftName.localeCompare(rightName, 'zh-Hans-CN')
   })
+}
 
-  const sortNodes = (nodes) => {
-    nodes.sort((a, b) => {
-      if (a.isLeaf === b.isLeaf) {
-        return a.title.localeCompare(b.title)
-      }
-      return a.isLeaf ? 1 : -1
-    })
-    nodes.forEach((node) => {
-      if (node.children) sortNodes(node.children)
-    })
+const createTreeNode = (entry) => {
+  const fullPath = String(entry?.path || '')
+  const title = buildDisplayName(fullPath)
+  const isLeaf = !entry?.is_dir
+
+  let nameStart = title
+  let nameEnd = ''
+
+  if (isLeaf && title.length > 5) {
+    nameEnd = title.slice(-5)
+    nameStart = title.slice(0, -5)
   }
 
-  sortNodes(root)
-  return root
-}
-
-// Helper to truncate filename with tail preservation
-const truncateFilename = (name) => {
-  if (!name) return ''
-  // This is a visual truncation helper; for true dynamic CSS truncation,
-  // we'd need a more complex setup. Here we rely on CSS text-overflow
-  // but if we want specifically "last 5 chars" visible, we might need
-  // to split the string if we were using a JS-only approach.
-  // However, the user asked for "show ellipsis, and last 5 chars".
-  // CSS `text-overflow: ellipsis` puts it at the end.
-  // To do middle truncation via CSS is hard.
-  // Let's try to do it via JS for the title attribute, but for visual
-  // we might use a CSS trick or just standard ellipsis if the JS one is too static.
-  // Let's stick to standard ellipsis for now but maybe try to implement the requested logic if possible.
-  // Actually, pure CSS start/end truncation is tricky.
-  // Let's provide a computed display name logic in the template or a method.
-  return name
-}
-
-const fileTreeData = computed(() => buildTreeData(normalizedFiles.value))
-const attachmentTreeData = computed(() => buildTreeData(normalizedAttachments.value))
-
-const toggleFolder = (data) => {
-  if (data.isLeaf) return
-  const key = data.key
-  const index = expandedKeys.value.indexOf(key)
-  if (index > -1) {
-    expandedKeys.value = expandedKeys.value.filter((k) => k !== key)
-  } else {
-    expandedKeys.value = [...expandedKeys.value, key]
+  return {
+    key: fullPath,
+    title,
+    nameStart,
+    nameEnd,
+    isLeaf,
+    children: isLeaf ? undefined : [],
+    fileData: {
+      ...entry,
+      path: fullPath,
+      name: title,
+      type: isLeaf ? 'file' : 'directory'
+    },
+    class: isLeaf ? 'file-node' : 'folder-node'
   }
 }
 
-const onFileSelect = (selectedKeys, { node }) => {
-  if (node.isLeaf) {
-    if (node.fileData) {
-      showFileContent(node.key, node.fileData)
+const updateTreeChildren = (nodes, targetKey, children) => {
+  return nodes.map((node) => {
+    if (node.key === targetKey) {
+      return { ...node, children }
+    }
+    if (!node.children?.length) {
+      return node
+    }
+    return {
+      ...node,
+      children: updateTreeChildren(node.children, targetKey, children)
+    }
+  })
+}
+
+const removeTreeNode = (nodes, targetKey) => {
+  return nodes.reduce((result, node) => {
+    if (node.key === targetKey) {
+      return result
+    }
+
+    const nextNode = node.children?.length
+      ? {
+          ...node,
+          children: removeTreeNode(node.children, targetKey)
+        }
+      : node
+
+    result.push(nextNode)
+    return result
+  }, [])
+}
+
+const normalizePathKey = (path) => String(path || '').replace(/\/+$/, '')
+
+const isSameOrChildPath = (path, targetPath) => {
+  const normalizedPath = normalizePathKey(path)
+  const normalizedTargetPath = normalizePathKey(targetPath)
+  if (!normalizedPath || !normalizedTargetPath) return false
+  return (
+    normalizedPath === normalizedTargetPath || normalizedPath.startsWith(`${normalizedTargetPath}/`)
+  )
+}
+
+const parseDownloadFilename = (contentDisposition) => {
+  if (!contentDisposition) return ''
+
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match && utf8Match[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch (error) {
+      console.warn('解析 UTF-8 文件名失败:', error)
     }
   }
+
+  const asciiMatch = contentDisposition.match(/filename="?([^";]+)"?/i)
+  if (asciiMatch && asciiMatch[1]) {
+    return asciiMatch[1]
+  }
+
+  return ''
 }
 
-const fileCount = computed(() => {
-  return normalizedFiles.value.length
-})
-
-const attachmentCount = computed(() => {
-  return normalizedAttachments.value.length
-})
-
-// 方法
 const getFileName = (fileItem) => {
-  if (fileItem.path) {
-    return fileItem.path.split('/').pop() || fileItem.path
+  if (fileItem?.name) return fileItem.name
+  if (fileItem?.path) {
+    return String(fileItem.path).split('/').pop() || String(fileItem.path)
   }
   return '未知文件'
 }
 
-const formatDate = (dateString) => {
-  if (!dateString) return ''
+const loadDirectoryChildren = async (directoryPath) => {
+  const res = await getViewerFileSystemTree(props.threadId, directoryPath)
+  return sortEntries(res?.entries || []).map((entry) => createTreeNode(entry))
+}
+
+const refreshFileSystem = async () => {
+  if (!props.threadId) {
+    dynamicTreeData.value = []
+    filesystemError.value = ''
+    return
+  }
+
+  loadingFiles.value = true
+  filesystemError.value = ''
+
   try {
-    const date = new Date(dateString)
-    return date.toLocaleString('zh-CN', {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    const res = await getViewerFileSystemTree(props.threadId, '/')
+    if (res?.entries) {
+      const displayRootEntry = res.entries.find(
+        (entry) => entry?.is_dir && entry.name === DISPLAY_ROOT_DIRECTORY_NAME
+      )
+
+      dynamicTreeData.value = displayRootEntry
+        ? await loadDirectoryChildren(displayRootEntry.path)
+        : []
+      expandedKeys.value = []
+      selectedKeys.value = props.activePreviewPath ? [props.activePreviewPath] : []
+    } else {
+      dynamicTreeData.value = []
+    }
   } catch (error) {
-    return dateString
+    dynamicTreeData.value = []
+    filesystemError.value = error?.message || '加载文件系统失败'
+    console.error('Failed to load root files', error)
+  } finally {
+    loadingFiles.value = false
   }
 }
 
-const formatContent = (contentArray) => {
-  if (!Array.isArray(contentArray)) return String(contentArray)
-  return contentArray.join('\n')
-}
+const loadData = async (treeNode) => {
+  if (treeNode.isLeaf || treeNode.children?.length || !props.threadId) return
 
-const showFileContent = (filePath, fileData) => {
-  currentFilePath.value = filePath
-  currentFile.value = fileData
-  modalVisible.value = true
-}
-
-const closeModal = () => {
-  modalVisible.value = false
-  currentFile.value = null
-  currentFilePath.value = ''
-}
-
-const downloadFile = (fileItem) => {
   try {
-    const content = formatContent(fileItem.content)
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
+    const children = await loadDirectoryChildren(treeNode.key)
+    dynamicTreeData.value = updateTreeChildren(dynamicTreeData.value, treeNode.key, children)
+  } catch (error) {
+    console.error('Failed to load children for', treeNode.key, error)
+  }
+}
 
+let previewRequestSeq = 0
+
+const revokeCurrentPreviewUrl = () => {
+  const previewUrl = currentFile.value?.previewUrl
+  if (previewUrl) {
+    window.URL.revokeObjectURL(previewUrl)
+  }
+}
+
+const loadActivePreview = async () => {
+  const filePath = props.activePreviewPath
+  const requestSeq = ++previewRequestSeq
+
+  revokeCurrentPreviewUrl()
+
+  if (!filePath || !props.threadId) {
+    currentFile.value = null
+    currentFilePath.value = ''
+    return
+  }
+
+  const baseFile = {
+    ...(activePreviewTab.value || {}),
+    path: filePath,
+    name: activePreviewTab.value?.name || getFileName({ path: filePath }),
+    type: 'file'
+  }
+
+  currentFilePath.value = filePath
+  currentFile.value = {
+    ...baseFile,
+    content: 'Loading...',
+    supported: true,
+    previewType: 'text',
+    message: '',
+    previewUrl: ''
+  }
+
+  try {
+    const res = await getViewerFileContent(props.threadId, filePath)
+    if (requestSeq !== previewRequestSeq) return
+
+    const nextFile = await normalizePreviewResponse(res, baseFile)
+
+    if (requestSeq !== previewRequestSeq) {
+      if (nextFile.previewUrl) window.URL.revokeObjectURL(nextFile.previewUrl)
+      return
+    }
+
+    currentFile.value = nextFile
+  } catch (error) {
+    if (requestSeq !== previewRequestSeq) return
+
+    currentFile.value = {
+      ...baseFile,
+      content: `Error loading file: ${error?.message || 'unknown error'}`,
+      supported: false,
+      previewType: 'unsupported',
+      message: error?.message || '文件预览失败',
+      previewUrl: ''
+    }
+  }
+}
+
+const onFileSelect = (nextSelectedKeys, { node }) => {
+  selectedKeys.value = nextSelectedKeys
+  if (!node?.isLeaf || !props.threadId) return
+  emit('open-preview', node.fileData, true)
+}
+
+const activatePreviewTab = (filePath) => {
+  emit('activate-preview', filePath)
+}
+
+const closePreviewTab = (filePath) => {
+  emit('close-preview-tab', filePath)
+}
+
+const toggleFileTree = () => {
+  emit('view-mode-change', treePaneVisible.value ? 'preview' : 'tree')
+}
+
+const pruneTreeStateAfterDelete = (targetPath) => {
+  selectedKeys.value = selectedKeys.value.filter((key) => !isSameOrChildPath(key, targetPath))
+  expandedKeys.value = expandedKeys.value.filter((key) => !isSameOrChildPath(key, targetPath))
+  emit('close-preview-path', targetPath)
+}
+
+const confirmDeleteNode = (node) => {
+  const fileName = node?.title || getFileName(node?.fileData)
+  const isDirectory = !node?.isLeaf
+  Modal.confirm({
+    title: isDirectory ? `确认删除文件夹「${fileName}」？` : `确认删除文件「${fileName}」？`,
+    content: isDirectory ? '将删除该文件夹及其所有内容，删除后不可恢复。' : '删除后不可恢复。',
+    okText: '删除',
+    okType: 'danger',
+    cancelText: '取消',
+    onOk: async () => {
+      const nextDeletingPaths = new Set(deletingPaths.value)
+      nextDeletingPaths.add(node.key)
+      deletingPaths.value = nextDeletingPaths
+
+      try {
+        await deleteViewerFile(props.threadId, node.key)
+        dynamicTreeData.value = removeTreeNode(dynamicTreeData.value, node.key)
+        pruneTreeStateAfterDelete(node.key)
+        message.success(isDirectory ? '文件夹删除成功' : '文件删除成功')
+      } catch (error) {
+        console.error(isDirectory ? '删除文件夹失败:' : '删除文件失败:', error)
+        message.error(error?.message || (isDirectory ? '删除文件夹失败' : '删除文件失败'))
+      } finally {
+        const latestDeletingPaths = new Set(deletingPaths.value)
+        latestDeletingPaths.delete(node.key)
+        deletingPaths.value = latestDeletingPaths
+      }
+    }
+  })
+}
+
+const downloadFile = async (fileItem) => {
+  if (!props.threadId || !fileItem?.path) return
+
+  try {
+    const response = await downloadViewerFile(props.threadId, fileItem.path)
+    const blob = await response.blob()
+    const contentDisposition =
+      response.headers.get('Content-Disposition') || response.headers.get('content-disposition')
+    const filename = parseDownloadFilename(contentDisposition) || getFileName(fileItem)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
     link.href = url
-    link.download = getFileName(fileItem)
+    link.download = filename
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    window.URL.revokeObjectURL(url)
   } catch (error) {
     console.error('下载文件失败:', error)
   }
 }
 
-const triggerUpload = () => {
-  if (fileInputRef.value) {
-    fileInputRef.value.click()
-  }
-}
-
-const handleFileChange = async (event) => {
-  const files = event.target.files
-  if (!files?.length || !props.threadId) return
-
-  isUploading.value = true
-  try {
-    for (const file of Array.from(files)) {
-      await threadApi.uploadThreadAttachment(props.threadId, file)
-      message.success(`${file.name} 上传成功`)
-    }
-    emitRefresh()
-  } catch (error) {
-    console.error('上传附件失败:', error)
-    message.error('上传附件失败')
-  } finally {
-    isUploading.value = false
-    event.target.value = ''
-  }
-}
-
 const emitRefresh = () => {
-  emit('refresh')
+  refreshFileSystem()
+  emit('refresh', props.threadId)
 }
 
-const deleteAttachment = async (fileItem) => {
-  if (!props.threadId || !fileItem?.file_id) return
-
-  try {
-    await threadApi.deleteThreadAttachment(props.threadId, fileItem.file_id)
-    message.success('附件已删除')
-    emitRefresh()
-  } catch (error) {
-    console.error('删除附件失败:', error)
-    message.error('删除附件失败')
-  }
+const emitClose = () => {
+  emit('close')
 }
 
-// 拖拽调整宽度相关
-const isResizing = ref(false)
-const startX = ref(0)
+let resizePointerId = null
+let pendingClientX = 0
+let resizeFrameId = 0
+
+const flushResize = () => {
+  resizeFrameId = 0
+  if (!isResizing.value) return
+  emit('resize', pendingClientX)
+}
+
+const queueResize = (clientX) => {
+  pendingClientX = clientX
+  if (resizeFrameId) return
+  resizeFrameId = window.requestAnimationFrame(flushResize)
+}
 
 const startResize = (e) => {
+  if (e.button !== 0) return
+
   isResizing.value = true
-  emit('resizing', true)
-  startX.value = e.clientX
+  resizePointerId = e.pointerId
+  pendingClientX = e.clientX
+  emit('resizing', true, e.clientX)
   document.body.style.cursor = 'col-resize'
   document.body.style.userSelect = 'none'
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', stopResize)
+
+  e.currentTarget?.setPointerCapture?.(e.pointerId)
+  window.addEventListener('pointermove', onPointerMove)
+  window.addEventListener('pointerup', stopResize)
+  window.addEventListener('pointercancel', stopResize)
 }
 
-const onMouseMove = (e) => {
-  if (!isResizing.value) return
-  const deltaX = e.clientX - startX.value
-  startX.value = e.clientX
-  emit('resize', deltaX)
+const onPointerMove = (e) => {
+  if (!isResizing.value || e.pointerId !== resizePointerId) return
+  queueResize(e.clientX)
 }
 
-const stopResize = () => {
-  if (isResizing.value) {
-    isResizing.value = false
-    emit('resizing', false)
-    document.body.style.cursor = ''
-    document.body.style.userSelect = ''
-    document.removeEventListener('mousemove', onMouseMove)
-    document.removeEventListener('mouseup', stopResize)
+const stopResize = (e) => {
+  if (!isResizing.value || (e && e.pointerId !== resizePointerId)) return
+
+  if (resizeFrameId) {
+    window.cancelAnimationFrame(resizeFrameId)
+    resizeFrameId = 0
   }
+
+  if (e) {
+    pendingClientX = e.clientX
+    emit('resize', pendingClientX)
+  }
+
+  isResizing.value = false
+  resizePointerId = null
+  emit('resizing', false)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', stopResize)
+  window.removeEventListener('pointercancel', stopResize)
 }
+
+onMounted(() => {
+  refreshFileSystem()
+})
+
+onUnmounted(() => {
+  if (resizeFrameId) {
+    window.cancelAnimationFrame(resizeFrameId)
+    resizeFrameId = 0
+  }
+  window.removeEventListener('pointermove', onPointerMove)
+  window.removeEventListener('pointerup', stopResize)
+  window.removeEventListener('pointercancel', stopResize)
+  document.body.style.cursor = ''
+  document.body.style.userSelect = ''
+  revokeCurrentPreviewUrl()
+})
+
+watch(
+  () => props.threadId,
+  (threadId) => {
+    if (threadId) {
+      refreshFileSystem()
+    } else {
+      dynamicTreeData.value = []
+      expandedKeys.value = []
+      selectedKeys.value = []
+      filesystemError.value = ''
+    }
+  }
+)
+
+watch([() => props.threadId, () => props.activePreviewPath], loadActivePreview, { immediate: true })
+
+watch(
+  () => props.activePreviewPath,
+  (filePath) => {
+    selectedKeys.value = filePath ? [filePath] : []
+  }
+)
 </script>
 
 <style scoped lang="less">
@@ -660,6 +655,7 @@ const stopResize = () => {
   border-radius: 2px;
   z-index: 10;
   transition: background 0.2s;
+  touch-action: none;
 
   &:hover {
     background: var(--main-400);
@@ -667,14 +663,30 @@ const stopResize = () => {
 }
 
 .agent-panel {
+  width: 100%;
   height: 100%;
+  min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
   background: var(--gray-0);
   transition: none;
 
   &.resizing {
     transition: none;
+  }
+
+  .panel-header {
+    border-bottom: 1px solid var(--gray-100);
+  }
+
+  :deep(.side-preview-shell) {
+    border: none;
+  }
+
+  :deep(.preview-header) {
+    min-height: 32px;
+    padding-top: 0;
   }
 }
 
@@ -682,100 +694,238 @@ const stopResize = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  height: 40px;
+  gap: 8px;
+  padding: 4px 12px;
+  min-height: var(--header-height);
   background: var(--gray-25);
+  border-bottom: 1px solid var(--gray-100);
   flex-shrink: 0;
 }
 
+.header-action-btn {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--gray-600);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.15s ease;
+
+  &:hover,
+  &.active {
+    background: var(--gray-100);
+    color: var(--gray-900);
+  }
+
+  &:disabled {
+    color: var(--gray-300);
+    cursor: not-allowed;
+    background: transparent;
+  }
+}
+
 .panel-title {
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
   font-weight: 600;
   font-size: 14px;
   color: var(--gray-900);
 
-  .header-icon {
-    color: var(--gray-700);
+  > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
 
-.header-actions {
+.window-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
-}
-
-.refresh-btn {
-  color: var(--gray-700);
-  font-size: 13px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-}
-
-.close-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  color: var(--gray-500);
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    background: var(--gray-100);
-    color: var(--gray-700);
-  }
-}
-
-.tabs {
-  display: flex;
-  background: var(--gray-25);
-  position: relative;
-  align-items: center;
-  padding: 8px 6px;
-  padding-top: 0px;
   gap: 4px;
   flex-shrink: 0;
-  border-bottom: 1px solid var(--gray-150);
-}
-
-.tab {
-  padding: 4px 12px;
-  border: none;
-  background: none;
-  color: var(--gray-600);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-  transition: all 0.15s ease;
-  border-radius: 999px;
-
-  &:hover {
-    background: var(--gray-150);
-    color: var(--gray-900);
-  }
-
-  &.active {
-    background: var(--gray-150);
-    color: var(--gray-900);
-  }
 }
 
 .tab-content {
   flex: 1;
-  overflow-y: auto;
-  padding: 16px;
-  min-height: 0; /* Important for flex child scroll */
+  overflow: hidden;
+  min-height: 0;
+}
 
-  /* 自定义滚动条 */
+.files-display {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+}
+
+.preview-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+}
+
+.tree-pane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+
+.files-display.has-preview.with-tree .tree-pane {
+  flex: 0 0 34%;
+  min-width: 260px;
+  max-width: 380px;
+  border-left: 1px solid var(--gray-100);
+}
+
+.preview-tabs-bar {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.preview-tab {
+  min-width: 0;
+  max-width: 220px;
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--gray-150);
+  border-radius: 8px;
+  background: var(--gray-25);
+  color: var(--gray-700);
+  overflow: hidden;
+  flex-shrink: 0;
+
+  &.active {
+    border-color: var(--gray-150);
+    background: var(--gray-0);
+    color: var(--main-800);
+  }
+}
+
+.preview-tab-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  padding: 5px 6px 5px 8px;
+}
+
+.preview-tab-icon {
+  flex-shrink: 0;
+  font-size: 14px;
+}
+
+.preview-tab-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.preview-tab-close {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--gray-500);
+  cursor: pointer;
+  padding: 0;
+
+  &:hover {
+    color: var(--gray-900);
+    background: var(--gray-100);
+  }
+}
+
+.side-preview-shell {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--gray-150);
+  border-radius: 12px;
+  background: var(--gray-0);
+  overflow: hidden;
+}
+
+.side-preview-shell :deep(.file-content),
+.side-preview-shell :deep(.side-file-content) {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.preview-empty,
+.empty {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: var(--gray-500);
+  padding: 24px;
+  font-size: 14px;
+}
+
+.preview-empty {
+  border: 1px dashed var(--gray-200);
+  border-radius: 12px;
+  background: linear-gradient(180deg, var(--gray-25) 0%, var(--gray-0) 100%);
+}
+
+.preview-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--gray-800);
+}
+
+.preview-empty-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.error-state {
+  gap: 8px;
+}
+
+.file-tree-container {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+
   &::-webkit-scrollbar {
     width: 6px;
   }
@@ -794,285 +944,6 @@ const stopResize = () => {
   }
 }
 
-.empty {
-  text-align: center;
-  color: var(--gray-500);
-  padding: 60px 0;
-  font-size: 14px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-
-  &::before {
-    content: '📋';
-    font-size: 32px;
-    opacity: 0.6;
-  }
-}
-
-.todo-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.todo-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 6px 12px;
-  border-radius: 8px;
-  border: 1px solid var(--gray-150);
-  transition: all 0.15s ease;
-
-  &:hover {
-    background: var(--main-10);
-    border-color: var(--gray-200);
-  }
-}
-
-.todo-status {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 2px;
-
-  .icon {
-    font-size: 16px;
-
-    &.completed {
-      color: #52c41a;
-    }
-    &.in-progress {
-      color: #1890ff;
-    }
-    &.pending {
-      color: #faad14;
-    }
-    &.cancelled {
-      color: #ff4d4f;
-    }
-    &.unknown {
-      color: var(--gray-400);
-    }
-  }
-}
-
-.todo-text {
-  flex: 1;
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--gray-1000);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-
-  .todo-item.completed & {
-    color: var(--gray-500);
-    text-decoration: line-through;
-  }
-}
-
-.list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding: 0 4px;
-
-  .list-header-left {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .count {
-    font-size: 13px;
-    color: var(--gray-500);
-  }
-
-  .info-icon {
-    color: var(--gray-400);
-    cursor: help;
-    transition: color 0.2s;
-
-    &:hover {
-      color: var(--main-500);
-    }
-  }
-
-  .add-btn {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    height: 28px;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    background: var(--gray-0);
-    color: var(--gray-700);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.2s;
-
-    &:hover:not(:disabled) {
-      background: var(--gray-50);
-      color: var(--main-700);
-      border-color: var(--main-300);
-    }
-
-    &:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  }
-}
-
-.file-content {
-  min-height: 300px;
-  max-height: 60vh;
-  overflow-y: auto;
-  background: var(--main-5);
-  border-radius: 6px;
-  padding: 16px;
-  border: 1px solid var(--gray-200);
-
-  &::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: var(--gray-50);
-    border-radius: 4px;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background: var(--gray-300);
-    border-radius: 4px;
-
-    &:hover {
-      background: var(--gray-400);
-    }
-  }
-
-  pre {
-    font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-    font-size: 13px;
-    line-height: 1.5;
-    margin: 0;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    color: var(--gray-1000);
-    background: transparent;
-  }
-
-  :deep(.md-editor-preview-wrapper) {
-    padding: 0;
-  }
-
-  :deep(.md-editor-preview) {
-    font-size: 14px;
-  }
-}
-
-.modal-header-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-}
-
-.file-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.modal-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.modal-action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--gray-600);
-  cursor: pointer;
-  transition: all 0.15s ease;
-  padding: 0;
-
-  &:hover {
-    background: var(--gray-100);
-    color: var(--gray-900);
-  }
-
-  &:active {
-    background: var(--gray-200);
-  }
-}
-
-.file-path-title {
-  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-  font-weight: 600;
-  color: var(--gray-1000);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Modal 样式优化 - shadcn 风格 */
-:deep(.ant-modal) {
-  z-index: 1050;
-}
-
-:deep(.ant-modal-content) {
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid var(--gray-200);
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-}
-
-:deep(.ant-modal-header) {
-  background: var(--main-5);
-  border-bottom: 1px solid var(--gray-200);
-  padding: 16px 20px;
-}
-
-:deep(.ant-modal-title) {
-  font-weight: 600;
-  color: var(--gray-1000);
-  font-family: 'JetBrains Mono', 'Fira Code', 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
-}
-
-:deep(.ant-modal-body) {
-  padding: 0;
-}
-
-/* File Tree Styles - VS Code Style Refined */
-.file-tree-container {
-  padding: 4px;
-  margin: 0 -4px;
-}
-
-.tree-node-wrapper {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  height: 28px;
-  padding-right: 8px;
-  position: relative;
-}
-
 .tree-node-name {
   display: flex;
   align-items: center;
@@ -1082,7 +953,6 @@ const stopResize = () => {
     -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   color: var(--gray-800);
-  line-height: 28px;
 }
 
 .name-start {
@@ -1096,26 +966,14 @@ const stopResize = () => {
   white-space: nowrap;
 }
 
-.folder-icon {
-  color: #dcb67a;
-  fill: #dcb67a;
-  fill-opacity: 0.2;
-
-  &.open {
-    color: #dcb67a;
-  }
-}
-
-.node-actions {
+.node-actions-container {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  padding-left: 4px;
-  gap: 2px;
+  gap: 4px;
 }
 
 .tree-action-btn {
-  display: none;
+  display: flex;
   align-items: center;
   justify-content: center;
   width: 24px;
@@ -1125,109 +983,18 @@ const stopResize = () => {
   color: var(--gray-500);
   cursor: pointer;
   padding: 0;
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
 }
 
 .tree-download-btn:hover {
   color: var(--main-600);
 }
 
-.tree-delete-btn:hover {
-  color: var(--color-error-500);
-}
-
-/* Specific Ant Design Tree Overrides */
-.file-tree-container :deep(.ant-tree) {
-  background: transparent;
-  font-family: inherit;
-  font-size: 14px;
-
-  .ant-tree-treenode {
-    width: 100%;
-    padding: 0;
-  }
-
-  .ant-tree-node-content-wrapper {
-    display: flex;
-    align-items: center;
-    transition: none;
-    border-radius: 0;
-    padding: 0 8px 0 0;
-    line-height: 28px;
-    flex: 1;
-    position: relative;
-    padding: 0 6px;
-    border-radius: 6px;
-    gap: 6px;
-
-    &:hover {
-      background-color: var(--gray-50);
-
-      .tree-action-btn {
-        display: flex;
-      }
-    }
-
-    &.ant-tree-node-selected {
-      background-color: var(--gray-100);
-    }
-  }
-
-  /* Icon Vertical Alignment */
-  .ant-tree-iconEle {
-    line-height: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-  }
-
-  /* Ensure Title Fills Space */
-  .ant-tree-title {
-    flex: 1;
-    overflow: hidden;
-    min-width: 0;
-  }
-
-  /* Switcher (Arrow) */
-  .ant-tree-switcher {
-    width: 24px;
-    height: 30px;
-    line-height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-
-    .ant-tree-switcher-icon {
-      font-size: 10px;
-      color: var(--gray-500);
-    }
-  }
-
-  .ant-tree-indent-unit {
-    width: 18px;
-  }
-
-  /* 隐藏文件夹展开/折叠箭头 */
-  .ant-tree-switcher {
-    display: none !important;
-  }
-}
-
-/* 附件列表专用样式 */
-.attachment-tree :deep(.ant-tree-node-content-wrapper) {
-  border: 1px solid var(--gray-200);
-  border-radius: 6px;
-  margin-bottom: 4px;
-
-  &:hover {
-    background-color: var(--gray-50);
-    border-color: var(--gray-300);
-  }
-
-  &.ant-tree-node-selected {
-    background-color: var(--gray-100);
-    border-color: var(--main-300);
-  }
+.tree-delete-btn:hover:not(:disabled) {
+  color: var(--error-600, #dc2626);
 }
 </style>

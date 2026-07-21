@@ -1,124 +1,74 @@
-
 <div align="center">
-<img width="140" height="140" alt="image" src="https://github.com/user-attachments/assets/299137b7-08d8-45b0-9feb-7b4ab35d7b48" />
+<h1>语析 Yuxi</h1>
 
-<h1>语析 - 基于大模型的知识库与知识图谱智能体开发平台</h1>
+<p><strong>多租户 Harness + 企业知识库</strong><br/>让企业知识可被智能体检索、推理与交付</p>
 
-[![Stable](https://img.shields.io/badge/stable-v0.4.4-blue.svg)](https://github.com/xerrors/Yuxi-Know/tree/v0.4.4)
-[![](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=ffffff)](https://github.com/xerrors/Yuxi-Know/blob/main/docker-compose.yml)
-[![](https://img.shields.io/github/issues/xerrors/Yuxi-Know?color=F48D73)](https://github.com/xerrors/Yuxi-Know/issues)
-[![License](https://img.shields.io/github/license/bitcookies/winrar-keygen.svg?logo=github)](https://github.com/xerrors/Yuxi-Know/blob/main/LICENSE)
-[![DeepWiki](https://img.shields.io/badge/DeepWiki-blue.svg)](https://deepwiki.com/xerrors/Yuxi-Know)
-[![zread](https://img.shields.io/badge/Ask_Zread-_.svg?style=flat&color=00b0aa&labelColor=000000&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxNiAxNiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHBhdGggZD0iTTQuOTYxNTYgMS42MDAxSDIuMjQxNTZDMS44ODgxIDEuNjAwMSAxLjYwMTU2IDEuODg2NjQgMS42MDE1NiAyLjI0MDFWNC45NjAxQzEuNjAxNTYgNS4zMTM1NiAxLjg4ODEgNS42MDAxIDIuMjQxNTYgNS42MDAxSDQuOTYxNTZDNS4zMTUwMiA1LjYwMDEgNS42MDE1NiA1LjMxMzU2IDUuNjAxNTYgNC45NjAxVjIuMjQwMUM1LjYwMTU2IDEuODg2NjQgNS4zMTUwMiAxLjYwMDEgNC45NjE1NiAxLjYwMDFaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00Ljk2MTU2IDEwLjM5OTlIMi4yNDE1NkMxLjg4ODEgMTAuMzk5OSAxLjYwMTU2IDEwLjY4NjQgMS42MDE1NiAxMS4wMzk5VjEzLjc1OTlDMS42MDE1NiAxNC4xMTM0IDEuODg4MSAxNC4zOTk5IDIuMjQxNTYgMTQuMzk5OUg0Ljk2MTU2QzUuMzE1MDIgMTQuMzk5OSA1LjYwMTU2IDE0LjExMzQgNS42MDE1NiAxMy43NTk5VjExLjAzOTlDNS42MDE1NiAxMC42ODY0IDUuMzE1MDIgMTAuMzk5OSA0Ljk2MTU2IDEwLjM5OTlaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik0xMy43NTg0IDEuNjAwMUgxMS4wMzg0QzEwLjY4NSAxLjYwMDEgMTAuMzk4NCAxLjg4NjY0IDEwLjM5ODQgMi4yNDAxVjQuOTYwMUMxMC4zOTg0IDUuMzEzNTYgMTAuNjg1IDUuNjAwMSAxMS4wMzg0IDUuNjAwMUgxMy43NTg0QzE0LjExMTkgNS42MDAxIDE0LjM5ODQgNS4zMTM1NiAxNC4zOTg0IDQuOTYwMVYyLjI0MDFDMTQuMzk4NCAxLjg4NjY0IDE0LjExMTkgMS42MDAxIDEzLjc1ODQgMS42MDAxWiIgZmlsbD0iI2ZmZiIvPgo8cGF0aCBkPSJNNCAxMkwxMiA0TDQgMTJaIiBmaWxsPSIjZmZmIi8%2BCjxwYXRoIGQ9Ik00IDEyTDEyIDQiIHN0cm9rZT0iI2ZmZiIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIvPgo8L3N2Zz4K&logoColor=ffffff)](https://zread.ai/xerrors/Yuxi-Know)
-[![demo](https://img.shields.io/badge/demo-00A1D6.svg?style=flat&logo=bilibili&logoColor=white)](https://www.bilibili.com/video/BV1DF14BTETq/)
+[![](https://img.shields.io/badge/Docker-2496ED?style=flat&logo=docker&logoColor=ffffff)](https://github.com/xerrors/Yuxi/blob/main/docker-compose.yml)
+[![](https://img.shields.io/github/issues/xerrors/Yuxi?color=F48D73)](https://github.com/xerrors/Yuxi/issues)
+[![License](https://img.shields.io/github/license/bitcookies/winrar-keygen.svg?logo=github)](https://github.com/xerrors/Yuxi/blob/main/LICENSE)
+[![DeepWiki](https://img.shields.io/badge/DeepWiki-blue.svg)](https://deepwiki.com/xerrors/Yuxi)
+[![Bilibili](https://img.shields.io/badge/知识库演示-00A1D6?logo=bilibili&logoColor=fff)](https://www.bilibili.com/video/BV1erE26iEgv/?share_source=copy_web&vd_source=37b0bdbf95b72ea38b2dc959cfadc4d8)
 
 
-<a href="https://trendshift.io/repositories/15845" target="_blank">
-  <img src="https://trendshift.io/api/badge/repositories/15845" alt="Yuxi-Know | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
-</a>
+<a href="https://trendshift.io/repositories/24335" target="_blank"><img src="https://trendshift.io/api/badge/repositories/24335" alt="xerrors%2FYuxi | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 
-[**文档中心**](https://xerrors.github.io/Yuxi-Know/) |
-[**视频演示**](https://www.bilibili.com/video/BV1DF14BTETq/)
+[[项目文档]](https://xerrors.github.io/Yuxi) · [[版本特性]](http://xhslink.com/o/5Y6QWnmjF2d) · [[🇬🇧 English README]](README.en.md)
 
 </div>
 
+![arch](https://xerrors.oss-cn-shanghai.aliyuncs.com/github/arch.png)
 
-## 核心特性
+## 简介
 
-- **智能体开发**：基于 LangGraph v1 的多智能体架构，支持子智能体、工具调用与中间件机制
-- **知识库（RAG）**：多格式文档上传，支持 Embedding / Rerank 配置及知识库评估
-- **知识图谱**：基于 LightRAG 的图谱构建与可视化，支持属性图谱并参与智能体推理
-- **平台与工程化**：Vue + FastAPI 架构，支持暗黑模式、Docker 与生产级部署
+语析（Yuxi）是一个基于大模型的智能知识库与知识图谱智能体开发平台。它把 **RAG 检索**、**Milvus 知识库内知识图谱** 与 **LangGraph 多智能体编排** 整合进统一的多租户工作台：管理员配置知识库、模型与权限，用户在类 ChatGPT 的界面中与可挂载 Skills、MCP、子智能体和沙盒工具的智能体对话，并获得带引用来源、知识图谱推理与可交付产物的回答。
 
+导航：[项目介绍](https://xerrors.github.io/Yuxi/) ｜ [快速开始](https://xerrors.github.io/Yuxi/intro/quick-start) ｜ [开发路线图](https://xerrors.github.io/Yuxi/develop-guides/roadmap) | [0.7 版本特性](http://xhslink.com/o/5Y6QWnmjF2d)；最新开发动态，详见 [changelog](https://xerrors.github.io/Yuxi/develop-guides/changelog)。
 
-## 你可以用语析做什么？
+> 📢 求职：作者为江南大学软件工程博士研究生，研究方向 AI Agent、知识图谱与大模型应用，预计 2027 年毕业，现寻求实习/全职机会，欢迎联系：wenjie.zhang@stu.jiangnan.edu.cn
 
-- 构建 **面向真实业务的 RAG + 知识图谱智能体**
-- 将 PDF / Word / Markdown / 图片快速转化为可推理的知识库
-- 自动（LightRAG）或手动构建知识图谱，并用于智能体推理
-- 使用 LangGraph v1 构建多智能体 / 子智能体系统
+---
 
-## 最新动态
+🩷 赞助商
 
-<details>
-<summary>[2026/01/24] v0.5.0-beta 版本发布</summary>
+<table>
+  <tr>
+    <td style="width: 220px; padding: 8px 12px 8px 8px; vertical-align: middle;">
+      <img 
+        width="220" 
+        height="64" 
+        alt="7fb163d0fb02740948521dbcaf6191ea" 
+        src="https://xerrors.oss-cn-shanghai.aliyuncs.com/github/image-20260623195812766.png"
+      />
+    </td>
+    <td style="padding: 8px 8px 8px 0; vertical-align: middle;">
+      <p style="margin: 0 0 4px 0;">
+        感谢 <a href="https://sui-xiang.com/">随想AI中转站</a > 对本项目的赞助！
+        随想AI中转站 是一家可靠高效的 API 中继服务提供商，提供 Claude、Codex、Gemini 等的中继服务。注重隐私的中转站·无数据倒卖·无模型掺水，隐私，透明，极速售后。新账户注册每日签到就送 0.5 元测试额度，充值额度 1:1，无需订阅，按量付费。
+      </p >
+    </td>
+  </tr>
+</table>
 
-### 新增
+![image-20260606190609377](https://xerrors.oss-cn-shanghai.aliyuncs.com/github/image-20260606235615139.png)
 
-- 优化 OCR 体验并新增对 Deepseek OCR 的支持
-- 优化 RAG 检索，支持根据文件 pattern 来检索（Agentic Mode）
-- 重构智能体对于“工具变更/模型变更”的处理逻辑，无需导入更复杂的中间件
-- 重构知识库的 Agentic 配置逻辑，与 Tools 解耦
-- 将工具与知识库解耦，在 context 中就完成解耦，虽然最终都是在 Agent 中的 get_tools 中获取
-- 优化chunk逻辑，移除 QA 分割，集成到普通分块中，并优化可视化逻辑
-- 重构知识库处理逻辑，分为 上传—解析—入库 三个阶段
-- 重构 MCP 相关配置，使用数据库来控制 [#469](https://github.com/xerrors/Yuxi-Know/pull/469)
-- 使用 docling 解析 office 文件（docx/xlsx/pptx）
-- 优化后端的依赖，减少镜像体积 [#428](https://github.com/xerrors/Yuxi-Know/issues/428)
-- 优化 liaghtrag 的知识库调用结果，提供 content/graph/both 多个选项
-- 优化数据库查询工具，可通过设计环境变量添加描述，让模型更好的调用
+## 技术栈
 
-### 修复
-
-- 修复知识图谱上传的向量配置错误，并新增模型选择以及 batch size 选择
-- 修复部分场景下获取工具列表报错 [#470](https://github.com/xerrors/Yuxi-Know/pull/470)
-- 修改方法备注信息 [#478](https://github.com/xerrors/Yuxi-Know/pull/478)
-- 修复多次 human-in-the-loop 的渲染解析问题 [#453](https://github.com/xerrors/Yuxi-Know/issues/453) [#475](https://github.com/xerrors/Yuxi-Know/pull/475)
-
-</details>
-
-<details>
-<summary>[2025/12/19] v0.4.0 版本发布</summary>
-
-### 新增
-- 新增对于上传附件的智能体中间件，详见[文档](https://xerrors.github.io/Yuxi-Know/latest/advanced/agents-config.html#%E6%96%87%E4%BB%B6%E4%B8%8A%E4%BC%A0%E4%B8%AD%E9%97%B4%E4%BB%B6)
-- 新增多模态模型支持（当前仅支持图片），详见[文档](https://xerrors.github.io/Yuxi-Know/latest/advanced/agents-config.html#%E5%A4%9A%E6%A8%A1%E6%80%81%E5%9B%BE%E7%89%87%E6%94%AF%E6%8C%81)
-- 新建 DeepAgents 智能体（深度分析智能体），支持 todo，files 等渲染，支持文件的下载。
-- 新增基于知识库文件生成思维导图功能（[#335](https://github.com/xerrors/Yuxi-Know/pull/335#issuecomment-3530976425)）
-- 新增基于知识库文件生成示例问题功能（[#335](https://github.com/xerrors/Yuxi-Know/pull/335#issuecomment-3530976425)）
-- 新增知识库支持文件夹/压缩包上传的功能（[#335](https://github.com/xerrors/Yuxi-Know/pull/335#issuecomment-3530976425)）
-- 新增自定义模型支持、新增 dashscope rerank/embeddings 模型的支持
-- 新增文档解析的图片支持，已支持 MinerU Officical、Docs、Markdown Zip 格式
-- 新增暗色模式支持并调整整体 UI（[#343](https://github.com/xerrors/Yuxi-Know/pull/343)）
-- 新增知识库评估功能，支持导入评估基准或者自动构建评估基准（目前仅支持 Milvus 类型知识库）详见[文档](https://xerrors.github.io/Yuxi-Know/latest/intro/evaluation.html)
-- 新增同名文件处理逻辑：遇到同名文件则在上传区域提示，是否删除旧文件
-- 新增生产环境部署脚本，固定 python 依赖版本，提升部署稳定性
-- 优化图谱可视化方式，统一图谱数据结构，统一使用基于 G6 的可视化方式，同时支持上传带属性的图谱文件，详见[文档](https://xerrors.github.io/Yuxi-Know/latest/intro/knowledge-base.html#_1-%E4%BB%A5%E4%B8%89%E5%85%83%E7%BB%84%E5%BD%A2%E5%BC%8F%E5%AF%BC%E5%85%A5)
-- 优化 DBManager / ConversationManager，支持异步操作
-- 优化 知识库详情页面，更加简洁清晰，增强文件下载功能
-
-### 修复
-- 修复重排序模型实际未生效的问题
-- 修复消息中断后消息消失的问题，并改善异常效果
-- 修复当前版本如果调用结果为空的时候，工具调用状态会一直处于调用状态，尽管调用是成功的
-- 修复检索配置实际未生效的问题
-
-### 破坏性更新
-
-- 移除 Chroma 的支持，当前版本标记为移除
-- 移除模型配置预设的 TogetherAI
-</details>
-
-<details>
-<summary>[2025/11/05] v0.3.0 版本发布</summary>
-
-- 全面适配 LangChain/LangGraph v1 版本的特性，使用 create_agent 创建智能体入口。
-- 文档解析升级，适配 mineru-2.6 以及 mineru-api。
-- 更多智能体开发套件 中间件、子智能体，更简洁，更易上手。
-</details>
-
-<img width="1846" height="434" alt="image" src="https://github.com/user-attachments/assets/ccbd2cbf-574a-4cd3-baac-167b3c619b6e" />
-
-
-
-
+| 层 | 技术 |
+| --- | --- |
+| 前端 | Vue 3 · Vite · Pinia |
+| 后端 | FastAPI · LangGraph · ARQ (异步 worker) |
+| 存储 | PostgreSQL · Redis · MinIO · Milvus · Neo4j |
+| 文档解析 | MinerU · PaddleX · RapidOCR |
+| 部署 | Docker Compose |
 ## 快速开始
 
-克隆代码，并初始化
+**前置要求**：已安装 [Docker](https://docs.docker.com/get-docker/) 与 Docker Compose，并准备至少一个兼容 OpenAI 接口的大模型 API。
 
-```
-git clone --branch v0.4.4 --depth 1 https://github.com/xerrors/Yuxi-Know.git
-cd Yuxi-Know
+**1. 克隆代码并初始化**
+
+```bash
+git clone --branch v0.7.1 --depth 1 https://github.com/xerrors/Yuxi.git
+cd Yuxi
 
 # Linux/macOS
 ./scripts/init.sh
@@ -127,41 +77,41 @@ cd Yuxi-Know
 .\scripts\init.ps1
 ```
 
-然后需要使用 docker 启动项目
+**2. 使用 Docker 启动**
 
-```
+```bash
 docker compose up --build
 ```
 
-等待启动完成后，访问 `http://localhost:5173`
+**3. 访问平台**
 
-## 示例与演示
+等待启动完成后，浏览器打开 `http://localhost:5173`，使用初始化时生成的管理员账户登录即可。
 
+> 💡 不需要知识库 / 知识图谱等重依赖时，可使用 `make up-lite` 以 LITE 轻量模式启动，加快冷启动速度。更多部署说明见 [项目文档](https://xerrors.github.io/Yuxi)。
 
-<img width="4420" height="2510" alt="image" src="https://github.com/user-attachments/assets/76d58c8f-e4ef-4373-8ab6-7c80da568910" />
-<br>
-<img width="10116" height="5751" alt="11111" src="https://github.com/user-attachments/assets/d3e4fe09-fa48-4686-93ea-2c50300ade21" />
-<br>
-<img width="10116" height="5751" alt="22222" src="https://github.com/user-attachments/assets/734a7cce-8b38-48ae-8e21-ca88996e5dde" />
+## 致谢
 
-<br>
-<img width="10116" height="5751" alt="1212" src="https://github.com/user-attachments/assets/06d56525-69bf-463a-8360-286b2cf8796f" />
-<br>
-<img width="10116" height="5751" alt="44444" src="https://github.com/user-attachments/assets/e390ec4b-8690-4aee-bbb2-3536f7f67dc9" />
+本项目参考并引用了以下优秀开源项目，在此致以诚挚的感谢：
 
+- [LightRAG](https://github.com/HKUDS/LightRAG) - 早期版本曾参考其图谱构建与检索思路；当前 Yuxi 已实现自研 Milvus 知识库/图谱链路以替换历史集成，降低兼容性问题
+- [DeepAgents](https://github.com/langchain-ai/deepagents) - 直接引入作为深度智能体框架
+- [DeerFlow](https://github.com/bytedance/deer-flow) - 参考了其 Sandbox 智能体架构的实现思路
+- [RAGflow](https://github.com/infiniflow/ragflow) - 参考了其文档 Text Chunking 的分块策略
+- [LangGraph](https://github.com/langchain-ai/langgraph) - 多智能体编排框架，本项目的核心架构基础
+- [QwenPaw](https://github.com/agentscope-ai/QwenPaw) - 参考模型配置与个人文件区域设计
 
 ## 参与贡献
 
 感谢所有贡献者的支持！
 
-<a href="https://github.com/xerrors/Yuxi-Know/contributors">
-  <img src="https://contrib.rocks/image?repo=xerrors/Yuxi-Know&max=100&columns=15" />
+<a href="https://github.com/xerrors/Yuxi/contributors">
+  <img src="https://contrib.rocks/image?repo=xerrors/Yuxi&max=100&columns=10" />
 </a>
 
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=xerrors/Yuxi-Know)](https://star-history.com/#xerrors/Yuxi-Know)
+[![Star History Chart](https://api.star-history.com/svg?repos=xerrors/Yuxi)](https://star-history.com/#xerrors/Yuxi)
 
 ## 📄 许可证
 
@@ -172,7 +122,5 @@ docker compose up --build
 <div align="center">
 
 **如果这个项目对您有帮助，请不要忘记给我们一个 ⭐️**
-
-[报告问题](https://github.com/xerrors/Yuxi-Know/issues) | [功能请求](https://github.com/xerrors/Yuxi-Know/issues) | [讨论](https://github.com/xerrors/Yuxi-Know/discussions)
 
 </div>

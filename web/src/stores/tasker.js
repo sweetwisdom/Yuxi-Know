@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { taskerApi } from '@/apis/tasker'
+import { useUserStore } from '@/stores/user'
 import { parseToShanghai } from '@/utils/time'
 
 const ACTIVE_STATUSES = new Set(['pending', 'running', 'queued'])
@@ -32,10 +33,10 @@ const toTask = (raw = {}) => ({
 })
 
 export const useTaskerStore = defineStore('tasker', () => {
+  const userStore = useUserStore()
   const tasks = ref([])
   const loading = ref(false)
   const lastError = ref(null)
-  const isPolling = ref(false)
   const isDrawerOpen = ref(false)
   const summary = ref(createDefaultSummary())
   let pollingTimer = null
@@ -68,6 +69,11 @@ export const useTaskerStore = defineStore('tasker', () => {
   const successCount = computed(() => statusCounts.value?.success || 0)
   const totalCount = computed(() => summary.value?.total || 0)
 
+  // 是否存在需要持续轮询的任务：summary 统计或本地乐观登记的活跃任务
+  const hasActiveTasks = computed(
+    () => activeCount.value > 0 || tasks.value.some((task) => ACTIVE_STATUSES.has(task.status))
+  )
+
   function upsertTask(rawTask) {
     if (!rawTask || !rawTask.id) return
     const task = toTask(rawTask)
@@ -80,6 +86,14 @@ export const useTaskerStore = defineStore('tasker', () => {
   }
 
   async function loadTasks(params = {}) {
+    if (!userStore.isAdmin) {
+      tasks.value = []
+      summary.value = createDefaultSummary()
+      lastError.value = null
+      syncPolling()
+      return
+    }
+
     loading.value = true
     lastError.value = null
     try {
@@ -96,6 +110,7 @@ export const useTaskerStore = defineStore('tasker', () => {
       summary.value = createDefaultSummary()
     } finally {
       loading.value = false
+      syncPolling()
     }
   }
 
@@ -154,23 +169,21 @@ export const useTaskerStore = defineStore('tasker', () => {
       updated_at: now,
       payload: payload || {}
     })
+    syncPolling()
   }
 
   function openDrawer() {
     isDrawerOpen.value = true
+    syncPolling()
   }
 
   function closeDrawer() {
     isDrawerOpen.value = false
-  }
-
-  function toggleDrawer() {
-    isDrawerOpen.value = !isDrawerOpen.value
+    syncPolling()
   }
 
   function startPolling(interval = 5000) {
     if (pollingTimer) return
-    isPolling.value = true
     pollingTimer = setInterval(() => {
       loadTasks()
     }, interval)
@@ -181,7 +194,16 @@ export const useTaskerStore = defineStore('tasker', () => {
       clearInterval(pollingTimer)
       pollingTimer = null
     }
-    isPolling.value = false
+  }
+
+  // 轮询所有权收敛到 store：抽屉打开或存在活跃任务时持续轮询，否则停止，
+  // 修复抽屉关闭后任务角标（activeCount）不再更新的问题。
+  function syncPolling() {
+    if (userStore.isAdmin && (isDrawerOpen.value || hasActiveTasks.value)) {
+      startPolling()
+    } else {
+      stopPolling()
+    }
   }
 
   function reset() {
@@ -196,25 +218,19 @@ export const useTaskerStore = defineStore('tasker', () => {
     isDrawerOpen,
     tasks,
     sortedTasks,
-    summary,
-    statusCounts,
     totalCount,
     successCount,
     failedCount,
     loading,
     lastError,
     activeCount,
-    isPolling,
     loadTasks,
     refreshTask,
     cancelTask,
     deleteTask,
     registerQueuedTask,
-    startPolling,
-    stopPolling,
     reset,
     openDrawer,
-    closeDrawer,
-    toggleDrawer
+    closeDrawer
   }
 })

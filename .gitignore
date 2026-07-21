@@ -1,3 +1,7 @@
+.yuxi/
+
+*.egg-info
+
 ### python gitignore
 __pycache__/
 *.pyc
@@ -32,6 +36,13 @@ cache
 *.bak
 *._*
 
+# test
+.pytest_cache
+.playwright
+.playwright-cli
+.playwright-mcp
+.opencode
+
 
 ### IDE
 .vscode
@@ -41,6 +52,8 @@ cache
 .claude
 .cursor
 .trae
+.codex
+.sisyphus
 .pytest_cache
 
 *.secret*
@@ -51,7 +64,7 @@ cache
 *.local.py
 *.local.js
 *.local.yaml
-
+*.local/*
 
 *.pdf
 src/data
@@ -66,3 +79,7 @@ docs/vibe
 .cursorrules
 
 /models
+
+.taskr/
+web/src/utils/__tests__/
+web/test/

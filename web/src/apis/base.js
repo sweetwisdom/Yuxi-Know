@@ -54,7 +54,14 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
 
       try {
         errorData = await response.json()
-        errorMessage = errorData.detail || errorData.message || errorMessage
+        // detail 可能是字符串，也可能是结构化对象（如 { error, message }），后者需取出可读文案，
+        // 否则直接拼接会得到 "[object Object]"。
+        const detail = errorData.detail
+        if (detail && typeof detail === 'object') {
+          errorMessage = detail.message || detail.error || errorMessage
+        } else {
+          errorMessage = detail || errorData.message || errorMessage
+        }
         console.log('API错误详情:', errorData)
 
         // 如果是422错误，打印更详细的信息
@@ -73,17 +80,20 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
       }
 
       // 特殊处理401和403错误
+      const error = new Error(errorMessage)
+      error.response = {
+        status: response.status,
+        statusText: response.statusText,
+        data: errorData
+      }
+
       if (response.status === 401) {
         // 如果是认证失败，可能需要重新登录
         const userStore = useUserStore()
 
-        // 检查是否是token过期
+        // 检查是否是token过期（errorMessage 已统一为字符串，避免对对象 detail 调用 includes 抛错）
         const isTokenExpired =
-          errorData &&
-          (errorData.detail?.includes('令牌已过期') ||
-            errorData.detail?.includes('token expired') ||
-            errorMessage?.includes('令牌已过期') ||
-            errorMessage?.includes('token expired'))
+          errorMessage?.includes('令牌已过期') || errorMessage?.includes('token expired')
 
         message.error(isTokenExpired ? '登录已过期，请重新登录' : '认证失败，请重新登录')
 
@@ -97,14 +107,16 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
           window.location.href = '/login'
         }, 1500)
 
-        throw new Error('未授权，请先登录')
+        throw error
       } else if (response.status === 403) {
-        throw new Error('没有权限执行此操作')
+        error.message = '没有权限执行此操作'
+        throw error
       } else if (response.status === 500) {
-        throw new Error('服务器内部错误，请使用 docker logs api-dev 查看详细日志')
+        error.message = '服务器内部错误，请使用 docker logs api-dev 查看详细日志'
+        throw error
       }
 
-      throw new Error(errorMessage)
+      throw error
     }
 
     // 根据responseType处理响应
@@ -123,7 +135,9 @@ export async function apiRequest(url, options = {}, requiresAuth = true, respons
       return response
     }
   } catch (error) {
-    console.error('API请求错误:', error)
+    if (error.name !== 'AbortError') {
+      console.error('API请求错误:', error)
+    }
     throw error
   }
 }

@@ -110,6 +110,7 @@ const switchDataType = (val) => {
 const callStatsChartRef = ref(null)
 let callStatsChart = null
 let retryTimer = null
+let hoveredSeriesName = null
 const retryCount = ref(0)
 const maxRetry = 20
 
@@ -121,7 +122,6 @@ const loadCallStats = async () => {
     await nextTick()
     renderCallStatsChart()
   } catch (error) {
-    // eslint-disable-next-line no-console
     console.error('加载调用统计数据失败:', error)
   } finally {
     callStatsLoading.value = false
@@ -153,6 +153,7 @@ const renderCallStatsChart = () => {
   if (callStatsChart) {
     callStatsChart.dispose()
   }
+  hoveredSeriesName = null
 
   callStatsChart = echarts.init(container)
 
@@ -170,8 +171,15 @@ const renderCallStatsChart = () => {
     }
   })
 
+  const agentNames = callStatsData.value.agent_names || {}
+
+  const resolveCategoryLabel = (cat) => {
+    if (cat === 'None') return '未知模型'
+    return agentNames[cat] || cat
+  }
+
   const series = categories.map((category, index) => ({
-    name: category === 'None' ? '未知模型' : category,
+    name: resolveCategoryLabel(category),
     type: 'bar',
     stack: 'total',
     emphasis: { focus: 'series' },
@@ -216,13 +224,17 @@ const renderCallStatsChart = () => {
       textStyle: { color: getCSSVariable('--gray-600'), fontSize: 12 },
       formatter: (params) => {
         if (!params?.length) return ''
+        const visibleParams = params.filter((param) => Number(param.value) !== 0)
+        if (!visibleParams.length) return ''
         let total = 0
-        let result = `${params[0].name}<br/>`
-        params.forEach((param) => {
+        let result = `${visibleParams[0].name}<br/>`
+        visibleParams.forEach((param) => {
           total += param.value
           const truncatedName = truncateLegend(param.seriesName)
-          result += `<span style=\"display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:${param.color}\"></span>`
-          result += `${truncatedName}: ${formatValueForDisplay(param.value)}<br/>`
+          const isHovered = param.seriesName === hoveredSeriesName
+          const itemStyle = isHovered ? 'font-weight:700;color:var(--gray-900)' : ''
+          result += `<span style="display:inline-block;margin-right:5px;border-radius:10px;width:10px;height:10px;background-color:${param.color}"></span>`
+          result += `<span style="${itemStyle}">${truncatedName}: ${formatValueForDisplay(param.value)}</span><br/>`
         })
         const labelMap = {
           models: '模型调用',
@@ -231,21 +243,32 @@ const renderCallStatsChart = () => {
           tools: '工具调用'
         }
         const formattedTotal = formatValueForDisplay(total)
-        return `<div style=\"font-weight:bold;margin-bottom:5px\">${labelMap[callDataType.value]}</div>${result}<strong>总计: ${formattedTotal}</strong>`
+        return `<div style="font-weight:bold;margin-bottom:5px">${labelMap[callDataType.value]}</div>${result}<strong>总计: ${formattedTotal}</strong>`
       }
     },
     legend: {
-      data: categories.map((cat) => (cat === 'None' ? '未知模型' : cat)),
+      type: 'scroll',
+      data: categories.map(resolveCategoryLabel),
       bottom: 5 /* 调整图例位置，从0改为5 */,
       textStyle: { color: getCSSVariable('--gray-500'), fontSize: 12 },
       itemWidth: 14,
       itemHeight: 14,
-      formatter: (name) => truncateLegend(name)
+      formatter: (name) => truncateLegend(name),
+      pageIconSize: 12,
+      pageIconColor: getCSSVariable('--gray-500'),
+      pageIconInactiveColor: getCSSVariable('--gray-300'),
+      pageTextStyle: { color: getCSSVariable('--gray-500') }
     },
     series
   }
 
   callStatsChart.setOption(option)
+  callStatsChart.on('mouseover', (event) => {
+    hoveredSeriesName = event?.seriesName || null
+  })
+  callStatsChart.on('mouseout', () => {
+    hoveredSeriesName = null
+  })
 
   window.addEventListener('resize', handleResize, resizeListenerOptions)
 }

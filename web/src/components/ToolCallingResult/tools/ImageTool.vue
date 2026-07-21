@@ -1,14 +1,18 @@
 <template>
   <BaseToolCall :tool-call="toolCall">
-    <template #result="{ resultContent }">
-      <div class="image-result">
-        <img :src="parseData(resultContent)" />
+    <template #result="{}">
+      <div v-if="imageUrl" class="image-result">
+        <img :src="imageUrl" />
+      </div>
+      <div v-else class="text-result">
+        {{ parsedContent }}
       </div>
     </template>
   </BaseToolCall>
 </template>
 
 <script setup>
+import { computed } from 'vue'
 import BaseToolCall from '../BaseToolCall.vue'
 
 const props = defineProps({
@@ -22,12 +26,25 @@ const parseData = (content) => {
   if (typeof content === 'string') {
     try {
       return JSON.parse(content)
-    } catch (error) {
+    } catch {
       return content
     }
   }
   return content
 }
+
+const parsedContent = computed(() => {
+  return parseData(props.toolCall.tool_call_result?.content)
+})
+
+const imageUrl = computed(() => {
+  const content = parsedContent.value
+  // 图片类工具返回 URL 字符串时直接渲染图片
+  if (content && typeof content === 'string' && content.startsWith('http')) {
+    return content
+  }
+  return null
+})
 </script>
 
 <style lang="less" scoped>
@@ -42,5 +59,10 @@ const parseData = (content) => {
     max-width: 100%;
     border-radius: 4px;
   }
+}
+
+.text-result {
+  padding: 8px;
+  color: var(--color-text);
 }
 </style>

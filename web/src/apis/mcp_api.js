@@ -1,4 +1,4 @@
-import { apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete } from './base'
+import { apiGet, apiAdminGet, apiAdminPost, apiAdminPut, apiAdminDelete } from './base'
 
 /**
  * MCP 服务器管理 API 模块
@@ -16,7 +16,7 @@ const BASE_URL = '/api/system/mcp-servers'
  * @returns {Promise} - 服务器列表
  */
 export const getMcpServers = async () => {
-  return apiAdminGet(BASE_URL)
+  return apiGet(BASE_URL)
 }
 
 /**
@@ -70,12 +70,13 @@ export const testMcpServer = async (name) => {
 }
 
 /**
- * 切换 MCP 服务器启用状态
+ * 更新 MCP 服务器启用状态
  * @param {string} name - 服务器名称
+ * @param {boolean} enabled - 是否启用
  * @returns {Promise} - 切换结果
  */
-export const toggleMcpServer = async (name) => {
-  return apiAdminPut(`${BASE_URL}/${encodeURIComponent(name)}/toggle`, {})
+export const updateMcpServerStatus = async (name, enabled) => {
+  return apiAdminPut(`${BASE_URL}/${encodeURIComponent(name)}/status`, { enabled })
 }
 
 // =============================================================================
@@ -113,10 +114,6 @@ export const toggleMcpServerTool = async (serverName, toolName) => {
   )
 }
 
-// =============================================================================
-// === 导出为对象形式（兼容现有代码风格）===
-// =============================================================================
-
 export const mcpApi = {
   getMcpServers,
   getMcpServer,
@@ -124,7 +121,7 @@ export const mcpApi = {
   updateMcpServer,
   deleteMcpServer,
   testMcpServer,
-  toggleMcpServer,
+  updateMcpServerStatus,
   getMcpServerTools,
   refreshMcpServerTools,
   toggleMcpServerTool
